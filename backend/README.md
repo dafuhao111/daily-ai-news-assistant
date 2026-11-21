@@ -39,6 +39,22 @@ File access is limited to `inputs/` and `history/` for reads/searches, and `draf
 
 The `bash` tool is registered and validates a single `python -m json.tool <workspace-file>` command shape, but returns `sandbox_unavailable` without starting a process. Windows low-privilege isolation and process-tree resource controls have not been verified, so command execution remains disabled by design.
 
+## Agent loop
+
+`app.agent.AgentRunner` binds the registry's Function Schemas to a LangChain chat model and runs an explicit LangGraph decision loop. Each returned Tool Call is validated and dispatched by the registry; its result is sent back as a `ToolMessage` with the same call ID. Read-only batches execute serially. A batch that mixes a side-effecting tool (`write_file` or `bash`) with another call is rejected as `unsafe_parallel_batch`.
+
+Set `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` in the untracked `.env` for an OpenAI-compatible endpoint that supports multi-turn Tool Calling. Use the provider's actual model ID. An ordinary text-only endpoint is not sufficient. The API key stays server-side and is never part of the task context or trace. Limits default to 45 seconds per model request, 8 tool rounds, 8 calls per model response, and 300 seconds per task. Provider token usage is recorded only when the response supplies it; no invoice cost is inferred.
+
+Mock-driven loop tests run with the normal suite and make no network requests. A real endpoint path is available, but requires explicit opt-in because it can incur provider charges:
+
+```powershell
+$env:RUN_REAL_LLM_TESTS = "1"
+uv run pytest -m real_llm tests/integration/test_real_llm.py
+Remove-Item Env:RUN_REAL_LLM_TESTS
+```
+
+That test asks the configured model to call `list_dir` once, checks the real Tool Calling round trip, and then checks the final response. It is skipped unless the opt-in flag and non-placeholder endpoint, model ID, and API key are configured.
+
 ## Tests
 
 ```powershell
