@@ -4,7 +4,7 @@
 
 ## 启动
 
-在项目根目录执行：
+首次使用或需要按锁文件重新安装依赖时，先停止本项目的开发服务和预览服务：在相应终端按 `Ctrl+C`。确认服务退出后，在项目根目录执行：
 
 ```powershell
 cd frontend
@@ -13,6 +13,16 @@ npm run dev -- --port 5173
 ```
 
 打开 http://127.0.0.1:5173/ 。建议 Node.js 22.12+ 或 24 LTS。
+
+依赖安装完成后，日常启动只需在 `frontend/` 目录运行 `npm run dev -- --port 5173`，无需每次执行 `npm ci`。
+
+### Windows 安装时提示 EPERM / esbuild.exe 被占用
+
+`npm ci` 会清理并重建 `node_modules`。如果 Vite 开发服务、预览服务或构建仍在运行，Windows 可能不允许删除它们正在使用的 `esbuild.exe`，出现 `EPERM: operation not permitted, unlink ...esbuild.exe`。
+
+先停止本项目的相关服务，再重新执行 `npm ci`；失败的安装可能已清理部分依赖，因此应完成重新安装后再启动。若相关服务由其他终端或工具启动，需要在原启动位置停止，不要直接结束电脑上所有 Node.js 进程。
+
+此类文件占用应先通过停服解决，不必首先尝试管理员权限、删除锁文件或修改依赖版本。
 
 ## 验证
 
