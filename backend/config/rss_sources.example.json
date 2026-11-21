@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "source_id": "openai",
+    "name": "OpenAI 官方新闻",
+    "feed_url": "https://openai.com/news/rss.xml",
+    "allowed_hosts": ["openai.com"],
+    "category": "大模型与研究",
+    "enabled": true
+  },
+  {
+    "source_id": "google-deepmind",
+    "name": "Google DeepMind 官方博客",
+    "feed_url": "https://deepmind.google/blog/rss.xml",
+    "allowed_hosts": ["deepmind.google"],
+    "category": "大模型与研究",
+    "enabled": true
+  },
+  {
+    "source_id": "microsoft-research",
+    "name": "Microsoft Research 官方博客",
+    "feed_url": "https://www.microsoft.com/en-us/research/feed/",
+    "allowed_hosts": ["www.microsoft.com"],
+    "category": "AI 工程",
+    "enabled": true
+  }
+]

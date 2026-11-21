@@ -290,3 +290,17 @@ def test_source_config_is_bounded_and_validated(tmp_path: Path) -> None:
 def test_sensitive_query_parameters_are_not_forwarded_to_the_model() -> None:
     with pytest.raises(ToolFailure, match="article_url_contains_secret"):
         canonicalize_url("https://articles.example.test/story?access_token=private-value")
+
+
+def test_recommended_catalog_contains_only_confirmed_official_sources() -> None:
+    path = Path(__file__).parents[2] / "config" / "rss_sources.example.json"
+    sources = load_rss_sources(path)
+    assert {source.source_id for source in sources} == {
+        "openai",
+        "google-deepmind",
+        "microsoft-research",
+    }
+    for source in sources:
+        assert source.enabled
+        assert source.feed_url.startswith("https://")
+        assert len(source.allowed_hosts) == 1
