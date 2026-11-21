@@ -1,8 +1,12 @@
 from pathlib import Path
 
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import create_engine, inspect
+
+from app.db.base import Base
 
 
 def test_initial_migration_creates_profile_tables(tmp_path: Path) -> None:
@@ -65,4 +69,7 @@ def test_initial_migration_creates_profile_tables(tmp_path: Path) -> None:
         "last_error_code",
         "idempotency_key",
     } <= delivery_columns
+    with engine.connect() as connection:
+        context = MigrationContext.configure(connection, opts={"compare_type": True})
+        assert compare_metadata(context, Base.metadata) == []
     engine.dispose()

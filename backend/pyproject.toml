@@ -20,7 +20,7 @@ dependencies = [
   "pydantic==2.14.4",
   "pydantic-settings==2.13.1",
   "python-dotenv==1.1.1",
-  "pymysql==1.1.2",
+  "pymysql[rsa]==1.1.2",
   "sqlalchemy==2.0.51",
   "tzdata==2025.2",
   "uvicorn==0.41.0",

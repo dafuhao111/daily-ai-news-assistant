@@ -32,7 +32,9 @@ class NewsItemRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     article_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    source_id: Mapped[str] = mapped_column(ForeignKey("rss_source.source_id"), nullable=False)
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("rss_source.source_id"), nullable=False, index=True
+    )
     source_name_snapshot: Mapped[str] = mapped_column(String(100), nullable=False)
     category: Mapped[str] = mapped_column(String(80), nullable=False)
     canonical_url: Mapped[str] = mapped_column(Text, nullable=False)
