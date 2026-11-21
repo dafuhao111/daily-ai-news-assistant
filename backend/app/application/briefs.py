@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Callable
 from datetime import date, timezone
 from typing import Any, Literal
 from urllib.parse import urlsplit
@@ -13,6 +14,7 @@ from app.agent import AgentRunner
 from app.agent.schemas import AgentRunResult
 from app.core.task_context import ToolContext
 from app.models.brief import BriefRecord, TaskRunRecord, ToolCallRecord
+from app.models.delivery import MailDeliveryRecord
 from app.models.profile import UserProfile, utc_now
 from app.news.repository import NewsRepository
 from app.news.schemas import NewsArticle, normalize_host
@@ -153,13 +155,14 @@ def _hydrate_items(
     return hydrated
 
 
-def _store_trace(session: Session, result: AgentRunResult) -> None:
+def _store_trace(session: Session, result: AgentRunResult, attempt: int) -> None:
     for event in result.events:
         if event.kind != "tool_execution" or not event.call_id or not event.tool_name:
             continue
         session.add(
             ToolCallRecord(
                 run_id=result.run_id,
+                attempt=attempt,
                 iteration=event.turn,
                 call_id=event.call_id,
                 tool_name=event.tool_name,
@@ -203,6 +206,9 @@ class BriefGenerationService:
         user_id: int = 1,
         run_type: Literal["manual", "scheduled"] = "manual",
         idempotency_key: str | None = None,
+        delivery_recipient: str | None = None,
+        delivery_skip_reason: str | None = None,
+        delivery_target_provider: Callable[[Session], tuple[str | None, str | None]] | None = None,
     ) -> BriefRead:
         normalized_preferences = _as_preferences(preferences)
         task_key = idempotency_key or f"{run_type}:{user_id}:{context.run_id}"
@@ -250,7 +256,15 @@ class BriefGenerationService:
                 items=items,
                 empty_reason=draft.empty_reason,
             )
-            return self._save_success(context.run_id, report_date, content, result)
+            return self._save_success(
+                context.run_id,
+                report_date,
+                content,
+                result,
+                delivery_recipient=delivery_recipient,
+                delivery_skip_reason=delivery_skip_reason,
+                delivery_target_provider=delivery_target_provider,
+            )
         except BriefGenerationError as error:
             status = "limited" if result is not None and result.status == "limited" else "failed"
             self._save_failure(context.run_id, error.code, status, result)
@@ -282,17 +296,34 @@ class BriefGenerationService:
                 ).one_or_none()
                 if identity is None:
                     raise BriefGenerationError("task_user_not_found")
-                session.add(
-                    TaskRunRecord(
-                        id=run_id,
-                        user_id=user_id,
-                        run_type=run_type,
-                        idempotency_key=idempotency_key,
-                        report_date=report_date,
-                        status="running",
-                        preferences_snapshot=preferences_snapshot,
+                existing = session.get(TaskRunRecord, run_id)
+                if existing is not None:
+                    if (
+                        existing.status != "queued"
+                        or existing.user_id != user_id
+                        or existing.run_type != run_type
+                        or existing.idempotency_key != idempotency_key
+                        or existing.report_date != report_date
+                        or existing.preferences_snapshot != preferences_snapshot
+                    ):
+                        raise BriefGenerationError("run_already_exists")
+                    existing.status = "running"
+                    existing.attempt_count += 1
+                    existing.error_code = None
+                    existing.finished_at = None
+                else:
+                    session.add(
+                        TaskRunRecord(
+                            id=run_id,
+                            user_id=user_id,
+                            run_type=run_type,
+                            idempotency_key=idempotency_key,
+                            report_date=report_date,
+                            status="running",
+                            attempt_count=1,
+                            preferences_snapshot=preferences_snapshot,
+                        )
                     )
-                )
                 return identity.display_name, identity.role
         except BriefGenerationError:
             raise
@@ -332,7 +363,7 @@ class BriefGenerationService:
                 run.finished_at = utc_now()
                 if result is not None:
                     run.usage_json = _usage_snapshot(result)
-                    _store_trace(session, result)
+                    _store_trace(session, result, run.attempt_count)
         except SQLAlchemyError as error:
             logger.warning("task failure status update failed (%s)", type(error).__name__)
 
@@ -342,6 +373,10 @@ class BriefGenerationService:
         report_date: date,
         content: BriefContent,
         result: AgentRunResult,
+        *,
+        delivery_recipient: str | None,
+        delivery_skip_reason: str | None,
+        delivery_target_provider: Callable[[Session], tuple[str | None, str | None]] | None,
     ) -> BriefRead:
         status: Literal["completed", "empty"] = "completed" if content.items else "empty"
         try:
@@ -349,6 +384,8 @@ class BriefGenerationService:
                 run = session.get(TaskRunRecord, run_id)
                 if run is None:
                     raise BriefGenerationError("task_run_not_found")
+                if delivery_target_provider is not None:
+                    delivery_recipient, delivery_skip_reason = delivery_target_provider(session)
                 record = BriefRecord(
                     run_id=run_id,
                     report_date=report_date,
@@ -357,17 +394,31 @@ class BriefGenerationService:
                     created_at=utc_now(),
                 )
                 session.add(record)
+                session.flush()
+                if content.items and (
+                    delivery_recipient is not None or delivery_skip_reason is not None
+                ):
+                    session.add(
+                        MailDeliveryRecord(
+                            brief_id=record.id,
+                            recipient_snapshot=delivery_recipient,
+                            status="skipped" if delivery_skip_reason else "pending",
+                            attempt_count=0,
+                            manual_retry_count=0,
+                            last_error_code=delivery_skip_reason,
+                            idempotency_key=f"brief:{record.id}",
+                        )
+                    )
                 run.status = status
                 run.finished_at = utc_now()
                 run.usage_json = _usage_snapshot(result)
                 run.error_code = None
-                _store_trace(session, result)
+                _store_trace(session, result, run.attempt_count)
                 NewsRepository.mark_task_success(
                     session,
                     [item.article_id for item in content.items],
                     {},
                 )
-                session.flush()
                 brief_id = record.id
         except BriefGenerationError:
             raise

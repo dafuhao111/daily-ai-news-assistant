@@ -9,9 +9,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
 
 from app.api.routes import router
+from app.application.deliveries import MailDeliveryService
+from app.application.mail_tests import MailTestService
+from app.application.tasks import TaskCoordinator
 from app.core.config import Settings, get_settings
 from app.core.local_request import LocalRequestMiddleware
 from app.db.session import build_session_factory
+from app.delivery.smtp import SMTPMailer
+from app.scheduler import DailyScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -32,18 +37,47 @@ def create_app(
             }
         database_engine = create_engine(app_settings.database_url, **engine_options)
     session_factory = build_session_factory(database_engine) if database_engine else None
+    smtp_mailer = SMTPMailer(app_settings)
+    delivery_service = (
+        MailDeliveryService(session_factory, app_settings, smtp_mailer) if session_factory else None
+    )
+    task_coordinator = (
+        TaskCoordinator(session_factory, app_settings, delivery_service)
+        if session_factory and delivery_service
+        else None
+    )
+    mail_test_service = MailTestService(session_factory, smtp_mailer) if session_factory else None
+    daily_scheduler = (
+        DailyScheduler(session_factory, task_coordinator, delivery_service)
+        if session_factory
+        and task_coordinator
+        and delivery_service
+        and app_settings.scheduler_enabled
+        else None
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        yield
-        current_engine = cast(Engine | None, app.state.engine)
-        if current_engine is not None:
-            current_engine.dispose()
+        try:
+            if app.state.daily_scheduler is not None:
+                await app.state.daily_scheduler.start()
+            yield
+        finally:
+            if app.state.daily_scheduler is not None:
+                await app.state.daily_scheduler.shutdown()
+            current_engine = cast(Engine | None, app.state.engine)
+            if current_engine is not None:
+                current_engine.dispose()
 
     app = FastAPI(title="Daily AI News Assistant API", version="0.1.0", lifespan=lifespan)
     app.state.settings = app_settings
     app.state.engine = database_engine
     app.state.session_factory = session_factory
+    app.state.smtp_mailer = smtp_mailer
+    app.state.mail_delivery_service = delivery_service
+    app.state.mail_test_service = mail_test_service
+    app.state.task_coordinator = task_coordinator
+    app.state.daily_scheduler = daily_scheduler
     app.add_middleware(LocalRequestMiddleware)
     app.include_router(router, prefix=app_settings.api_prefix)
 

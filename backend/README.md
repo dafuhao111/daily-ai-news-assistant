@@ -27,9 +27,34 @@ Available endpoints in this phase:
 
 - `GET` / `PUT` `/api/v1/profile`
 - `GET` / `PUT` `/api/v1/preferences`
+- `POST` `/api/v1/runs` and `GET` `/api/v1/runs/{run_id}`
+- `GET` `/api/v1/mail/status`, `POST` `/api/v1/mail/test`, and `POST` `/api/v1/mail/test/confirm`
+- `POST` `/api/v1/briefs/{brief_id}/delivery/retry`
 - `GET` `/api/v1/health`
 
-Preferences cannot be enabled until an email is configured and its test status is successful. Mail testing is implemented in a later phase.
+Preferences cannot be enabled until an email is configured, an SMTP test message is accepted, and the user confirms receiving it. `POST /api/v1/mail/test` always sends to the saved profile address; the body cannot override the recipient. A successful SMTP response is shown as `pending` until the user checks their inbox and calls `/api/v1/mail/test/confirm`.
+
+## Daily tasks and email delivery
+
+When a database is configured and `SCHEDULER_ENABLED=true`, APScheduler loads each enabled user's saved local run time and IANA timezone. On startup it only catches up today's queued or interrupted run; it does not backfill previous days. MySQL advisory locking elects one scheduler process, and the database idempotency key `daily:<user_id>:<local-date>` prevents duplicate daily runs. Keep the API in a single Uvicorn worker as documented in the technical plan. Agent workspaces default to the current user's application-data directory; if `AGENT_WORKSPACE_DIR` is overridden, make sure the directory is private to that OS user.
+
+Email uses the standard-library SMTP client and an existing mailbox provider. No provider or account is bundled or assumed to be available. Provider SMTP host, port, TLS mode, app-password requirements, quotas, and paid-plan requirements vary; confirm those details with the chosen provider. Configure these local environment variables:
+
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` (`starttls`, `ssl`, or unauthenticated `none`), and `SMTP_FROM_EMAIL`
+- `SMTP_USERNAME` and `SMTP_PASSWORD` together when the server requires authentication; authenticated `none` mode is rejected
+- `SMTP_TIMEOUT_SECONDS`, `SMTP_MAX_ATTEMPTS`, and `SMTP_RETRY_BASE_SECONDS` for bounded timeouts and backoff
+
+The `.env.example` contains only commented placeholders. A test send is never attempted automatically. The task run, redacted tool-call diagnostics, brief, selected-news markers, and mail-delivery row commit atomically. The delivery row snapshots the saved recipient after checking the current subscription and mail confirmation; the SMTP sender checks those values again before sending. SMTP acceptance is recorded as `submitted`, not delivered. The generated RFC Message-ID is not treated as a provider receipt. Explicit temporary rejections retry at most three times by default with exponential backoff. Permanent failures can be manually retried up to three times using the saved brief. An uncertain SMTP result is `unknown`, is not retried automatically, and the retry endpoint rejects it to avoid duplicate email. A process restart converts an in-flight `sending` attempt to `unknown`.
+
+To trigger a run in development, first confirm the saved email test and enable preferences, then send the local API request:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/runs" `
+  -Headers @{ Origin = "http://127.0.0.1:5173"; "Idempotency-Key" = "manual-check-1" } `
+  -ContentType "application/json" -Body "{}"
+```
+
+The response contains a `run_id`; poll `/api/v1/runs/{run_id}` for status. Tests use fake SMTP and mocked RSS/model services and never send real email. No real SMTP account is configured or verified by this repository.
 
 ## Task tools
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
+from app.core.config import Settings
 from app.db.base import Base
 from app.db.session import build_session_factory
 from app.main import create_app
@@ -40,7 +41,7 @@ def session_factory(engine: Engine) -> sessionmaker[Session]:
 
 @pytest.fixture
 def client(engine: Engine) -> Iterator[TestClient]:
-    app = create_app(engine=engine)
+    app = create_app(settings=Settings(scheduler_enabled=False), engine=engine)
     with TestClient(app) as test_client:
         yield test_client
 

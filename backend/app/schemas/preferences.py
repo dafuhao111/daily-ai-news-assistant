@@ -52,6 +52,13 @@ class PreferencesWrite(BaseModel):
             raise ValueError("keyword_too_long")
         return validate_terms(values)
 
+    @field_validator("run_time")
+    @classmethod
+    def run_time_must_be_local_wall_clock(cls, value: time) -> time:
+        if value.tzinfo is not None:
+            raise ValueError("run_time_must_not_include_timezone")
+        return value
+
     @field_validator("timezone")
     @classmethod
     def timezone_must_be_iana(cls, value: str) -> str:

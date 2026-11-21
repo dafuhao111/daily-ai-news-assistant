@@ -105,6 +105,7 @@ def test_invalid_preferences_are_rejected(
         {"topics": ["泛科技"], "run_time": "08:30", "timezone": "Asia/Shanghai"},
         {"topics": ["Agent 与工具"], "run_time": "25:90", "timezone": "Asia/Shanghai"},
         {"topics": ["Agent 与工具"], "run_time": "08:30", "timezone": "Mars/Olympus"},
+        {"topics": ["Agent 与工具"], "run_time": "08:30+08:00", "timezone": "Asia/Shanghai"},
         {
             "topics": ["Agent 与工具"],
             "keywords": ["重复", "重复"],

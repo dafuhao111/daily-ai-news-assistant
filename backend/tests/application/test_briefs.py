@@ -12,6 +12,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.agent import AgentLimits, AgentRunner
 from app.application.briefs import BriefGenerationError, BriefGenerationService
 from app.models.brief import BriefRecord, TaskRunRecord, ToolCallRecord
+from app.models.delivery import MailDeliveryRecord
 from app.models.news import NewsItemRecord
 from app.models.profile import UserProfile, utc_now
 from app.news.repository import NewsRepository
@@ -164,6 +165,7 @@ def test_model_decisions_drive_different_brief_traces_and_persist_evidence(
             preferences(),
             first_context,
             REPORT_DATE,
+            delivery_recipient="reader@example.org",
         )
     )
 
@@ -207,13 +209,20 @@ def test_model_decisions_drive_different_brief_traces_and_persist_evidence(
         first_call = session.scalar(
             select(ToolCallRecord).where(ToolCallRecord.run_id == first.run_id)
         )
+        delivery = session.scalar(
+            select(MailDeliveryRecord).where(MailDeliveryRecord.brief_id == brief.id)
+        )
     assert run is not None and run.status == "completed" and run.finished_at is not None
     assert run.preferences_snapshot["keywords"] == ["Agent"]
     assert brief is not None and brief.content_json["item_count"] == 1
     assert article is not None and article.included_at is not None
     assert first_call is not None
+    assert first_call.attempt == 1
     assert first_call.args_redacted == {"source_ids": "<list:1 items>"}
     assert "example-ai" not in json.dumps(first_call.args_redacted)
+    assert delivery is not None
+    assert delivery.status == "pending"
+    assert delivery.recipient_snapshot == "reader@example.org"
 
 
 def _trace_names(session_factory, run_id: str) -> list[str]:
@@ -444,11 +453,19 @@ def test_brief_and_news_inclusion_roll_back_together_on_persistence_failure(
     )
 
     with pytest.raises(BriefGenerationError, match="brief_persistence_failed"):
-        asyncio.run(generator.generate(preferences(), context, REPORT_DATE))
+        asyncio.run(
+            generator.generate(
+                preferences(),
+                context,
+                REPORT_DATE,
+                delivery_recipient="reader@example.org",
+            )
+        )
 
     with session_factory() as session:
         run = session.get(TaskRunRecord, context.run_id)
         brief = session.scalar(select(BriefRecord).where(BriefRecord.run_id == context.run_id))
+        delivery = session.scalar(select(MailDeliveryRecord))
         article = session.scalar(
             select(NewsItemRecord).where(
                 NewsItemRecord.article_id == article_id("/news/agent?id=1")
@@ -457,4 +474,5 @@ def test_brief_and_news_inclusion_roll_back_together_on_persistence_failure(
     assert run is not None and run.status == "failed"
     assert run.error_code == "brief_persistence_failed"
     assert brief is None
+    assert delivery is None
     assert article is not None and article.included_at is None

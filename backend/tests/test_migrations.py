@@ -23,6 +23,7 @@ def test_initial_migration_creates_profile_tables(tmp_path: Path) -> None:
         "task_run",
         "brief",
         "tool_call",
+        "mail_delivery",
         "alembic_version",
     } <= tables
     assert "recipient_email" in {
@@ -39,12 +40,29 @@ def test_initial_migration_creates_profile_tables(tmp_path: Path) -> None:
         "content_truncated",
         "included_at",
     } <= news_columns
-    assert {"idempotency_key", "preferences_snapshot", "usage_json"} <= {
+    assert {"idempotency_key", "preferences_snapshot", "usage_json", "attempt_count"} <= {
         column["name"] for column in inspect(engine).get_columns("task_run")
     }
     assert {"content_json", "revision"} <= {
         column["name"] for column in inspect(engine).get_columns("brief")
     }
     tool_call_columns = {column["name"] for column in inspect(engine).get_columns("tool_call")}
-    assert {"args_redacted", "error_code", "result_summary", "duration_ms"} <= tool_call_columns
+    assert {"attempt", "args_redacted", "error_code", "result_summary", "duration_ms"} <= (
+        tool_call_columns
+    )
+    tool_call_uniques = {
+        tuple(constraint["column_names"])
+        for constraint in inspect(engine).get_unique_constraints("tool_call")
+    }
+    assert ("run_id", "attempt", "call_id") in tool_call_uniques
+    delivery_columns = {column["name"] for column in inspect(engine).get_columns("mail_delivery")}
+    assert {
+        "recipient_snapshot",
+        "attempt_count",
+        "manual_retry_count",
+        "next_attempt_at",
+        "provider_reference",
+        "last_error_code",
+        "idempotency_key",
+    } <= delivery_columns
     engine.dispose()
