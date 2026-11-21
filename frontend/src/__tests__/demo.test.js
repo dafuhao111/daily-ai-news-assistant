@@ -39,6 +39,10 @@ describe('模拟偏好与本地持久化', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...defaults, topics: ['未知话题'] }))
     expect(setup().preferences.value.topics).toEqual(defaults.topics)
   })
+  it('将旧版“大模型进展”话题映射到新版宽泛选项', () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...defaults, topics: ['大模型进展', '开源项目'] }))
+    expect(setup().preferences.value.topics).toEqual(['大模型与研究', '开源项目'])
+  })
   it('存储不可用时不报告保存成功，也不改变已保存状态', () => {
     const demo = setup({ getItem: () => null, setItem: () => { throw new Error('quota') } })
     const result = demo.savePreferences({ ...defaults, name: '新称呼' })

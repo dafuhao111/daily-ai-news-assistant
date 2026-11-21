@@ -1,10 +1,9 @@
 <script setup>
-import { Newspaper, Archive, Workflow, SlidersHorizontal, ArrowUpRight, Radio } from '@lucide/vue'
+import { Newspaper, Archive, SlidersHorizontal, ArrowUpRight, Radio } from '@lucide/vue'
 defineProps({ page: String, name: String })
 const links = [
   { id: 'today', label: '每日简报', icon: Newspaper },
   { id: 'history', label: '历史简报', icon: Archive },
-  { id: 'agent', label: 'Agent 运行', icon: Workflow },
   { id: 'settings', label: '身份与订阅', icon: SlidersHorizontal },
 ]
 </script>

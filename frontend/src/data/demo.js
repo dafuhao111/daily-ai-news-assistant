@@ -1,15 +1,15 @@
 export const DEMO_DATE = '2026-11-20'
 export const STORAGE_KEY = 'daily-ai-news-demo.preferences.v1'
-export const topicOptions = ['大模型进展', 'Agent 与工具', '开源项目', 'AI 工程', '多模态', '行业动态']
+export const topicOptions = ['AI 与学习教育', 'AI 与体育', 'AI 与日常生活', 'AI 与工作效率', 'AI 与创作', '大模型与研究', 'Agent 与工具', '开源项目', 'AI 工程', '多模态', '行业动态']
 export const defaults = {
   name: '小林', role: '开发者 / 技术学习者', email: 'reader@example.com',
-  topics: ['大模型进展', 'Agent 与工具', '开源项目'],
+  topics: ['AI 与学习教育', 'Agent 与工具', 'AI 与工作效率'],
   keywords: 'LangGraph, 开源模型', excluded: '融资, 营销',
   time: '08:30', timezone: 'Asia/Shanghai', enabled: true,
 }
 
 const articles = [
-  { id: 'model', category: '大模型进展', title: '更小的模型，也能完成复杂任务：一项轻量推理实验', summary: '示例研究团队尝试通过任务分解与结果校验，让轻量模型处理多步骤问题。演示材料重点呈现成本、响应速度与任务完成率之间的取舍。', relevance: '与你关注的「大模型进展」相关，值得留意评测条件是否贴近实际使用。', source: '示例模型实验室', time: '07:40', path: 'lightweight-reasoning' },
+  { id: 'model', category: '大模型与研究', title: '更小的模型，也能完成复杂任务：一项轻量推理实验', summary: '示例研究团队尝试通过任务分解与结果校验，让轻量模型处理多步骤问题。演示材料重点呈现成本、响应速度与任务完成率之间的取舍。', relevance: '与你关注的「大模型与研究」相关，值得留意评测条件是否贴近实际使用。', source: '示例模型实验室', time: '07:40', path: 'lightweight-reasoning' },
   { id: 'agent', category: 'Agent 与工具', title: '让每次工具调用有迹可循：Agent 调试工作台示例', summary: '这份虚构的项目动态展示了工具参数、执行结果和失败重试的记录方式。开发者可以沿着一次任务的轨迹，定位信息不足或调用异常的环节。', relevance: '匹配关键词「LangGraph」，与你正在开发的新闻 Agent 直接相关。', source: '示例开发者周刊', time: '07:15', path: 'agent-observability' },
   { id: 'open', category: '开源项目', title: '一个面向个人开发者的 RSS 内容整理示例项目', summary: '示例项目将订阅源解析、条目去重和来源保留拆成独立模块，演示如何在有限资源下维护一条可追溯的信息处理链路。', relevance: '匹配「开源项目」，可用于理解 RSS 工程中的常见边界。', source: '示例开源社区', time: '06:50', path: 'rss-toolkit' },
   { id: 'eval', category: 'AI 工程', title: '从“能回答”到“可验证”：工具调用评测案例', summary: '示例评测区分了参数错误、工具失败和模型决策错误，强调仅看最终回答无法判断 Agent 是否正确使用工具。', relevance: '与你的 Agent 实践相关，可作为测试设计的思路参考。', source: '示例工程笔记', time: '06:20', path: 'tool-evaluation' },

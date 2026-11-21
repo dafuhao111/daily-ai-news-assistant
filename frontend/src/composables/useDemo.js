@@ -1,6 +1,7 @@
 import { computed, onScopeDispose, ref } from 'vue'
 import { defaults, initialBriefs, makeBrief, makeTrace, STORAGE_KEY, DEMO_DATE, topicOptions } from '../data/demo'
 const clone = (value) => JSON.parse(JSON.stringify(value))
+const legacyTopicAliases = { '大模型进展': '大模型与研究' }
 
 export function validatePreferences(value) {
   const errors = {}
@@ -18,9 +19,12 @@ function readPreferences(storage) {
     if (!raw) return { preferences: structuredClone(defaults), warning: '' }
     const value = JSON.parse(raw)
     const strings = ['name', 'role', 'email', 'keywords', 'excluded', 'time', 'timezone']
+    if (!Array.isArray(value.topics)) throw new Error('invalid topics')
+    const topics = [...new Set(value.topics.map((topic) => legacyTopicAliases[topic] || topic))]
+    const normalized = { ...value, topics }
     if (strings.some((key) => typeof value[key] !== 'string') || typeof value.enabled !== 'boolean' ||
-      Object.keys(validatePreferences(value)).length || value.topics.some((topic) => !topicOptions.includes(topic))) throw new Error('invalid')
-    return { preferences: Object.fromEntries(Object.keys(defaults).map((key) => [key, value[key]])), warning: '' }
+      Object.keys(validatePreferences(normalized)).length || topics.some((topic) => !topicOptions.includes(topic))) throw new Error('invalid')
+    return { preferences: Object.fromEntries(Object.keys(defaults).map((key) => [key, normalized[key]])), warning: '' }
   } catch {
     return { preferences: structuredClone(defaults), warning: '无法读取本地演示偏好，已使用示例配置；可以重新保存。' }
   }

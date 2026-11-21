@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import SettingsView from '../components/SettingsView.vue'
 import HistoryView from '../components/HistoryView.vue'
-import AgentView from '../components/AgentView.vue'
 import BriefView from '../components/BriefView.vue'
-import { defaults, initialBriefs } from '../data/demo'
+import { defaults, initialBriefs, makeTrace, topicOptions } from '../data/demo'
 import { validatePreferences } from '../composables/useDemo'
 
 let wrapper
@@ -47,9 +46,12 @@ describe('配置页面', () => {
     await wrapper.findAll('button').find((button) => button.text() === '撤销修改').trigger('click')
     expect(topic.attributes('aria-pressed')).toBe('false')
   })
+  it('提供学习、体育、生活等宽泛的 AI 关注方向', () => {
+    for (const topic of ['AI 与学习教育', 'AI 与体育', 'AI 与日常生活']) expect(topicOptions).toContain(topic)
+  })
 })
 
-describe('简报、历史与运行页面', () => {
+describe('简报与历史页面', () => {
   it('原文入口返回选中文章并明确展示虚构标识', async () => {
     wrapper = mount(BriefView, { props: { brief: initialBriefs[0] } })
     expect(wrapper.text()).toContain('虚构新闻 · 演示数据')
@@ -65,17 +67,9 @@ describe('简报、历史与运行页面', () => {
     expect(wrapper.text()).toContain('今天，让信息留一点空白')
     expect(wrapper.findAll('.article-row')).toHaveLength(0)
   })
-  it('模拟运行时锁定场景，并显示运行中状态', async () => {
-    wrapper = mount(AgentView, { props: { running: true, status: 'running', trace: [], scenario: 'success' } })
-    expect(wrapper.get('#scenario').attributes('disabled')).toBeDefined()
-    expect(wrapper.text()).toContain('模拟执行中')
-    expect(wrapper.text()).toContain('不是 LLM 决策')
-  })
-  it('运行页可以选择失败场景并发起模拟', async () => {
-    wrapper = mount(AgentView, { props: { running: false, status: 'idle', trace: [], scenario: 'success' } })
-    await wrapper.get('#scenario').setValue('failure')
-    expect(wrapper.emitted('update:scenario')[0]).toEqual(['failure'])
-    await wrapper.findAll('button').find((button) => button.text().includes('开始模拟任务')).trigger('click')
-    expect(wrapper.emitted('run')).toHaveLength(1)
+  it('保留开发侧轨迹样例，且示例路径按情况变化', () => {
+    expect(makeTrace('empty').some((event) => event.name === 'read_article')).toBe(false)
+    expect(makeTrace('success').some((event) => event.name === 'read_article')).toBe(true)
+    expect(makeTrace('model_failure').some((event) => event.name === 'fetch_rss')).toBe(false)
   })
 })

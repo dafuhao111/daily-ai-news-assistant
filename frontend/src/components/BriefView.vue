@@ -15,10 +15,10 @@ const dateLabel = (date) => date?.replaceAll('-', '.')
     </div>
     <div v-if="running" class="inline-loading" role="status"><span class="loading-dot"></span>正在模拟整理新简报，已有内容仍可阅读。</div>
     <div v-if="!brief || brief.status === 'empty'" class="empty-state">
-      <Inbox :size="32" aria-hidden="true" /><h3>今天，让信息留一点空白</h3><p>模拟来源中没有符合偏好的新内容。不会凑数，也不会发送空简报。</p><button class="button secondary" @click="$emit('run')">换个场景再试一次<ArrowRight :size="16" aria-hidden="true" /></button>
+      <Inbox :size="32" aria-hidden="true" /><h3>今天，让信息留一点空白</h3><p>模拟来源中没有符合偏好的新内容。不会凑数，也不会发送空简报。</p><a v-if="historical" class="button secondary" href="#today">返回每日简报<ArrowRight :size="16" aria-hidden="true" /></a><button v-else class="button secondary" @click="$emit('run')">重新生成演示简报<ArrowRight :size="16" aria-hidden="true" /></button>
     </div>
     <div v-else-if="brief.status === 'failed'" class="empty-state error-state">
-      <CircleAlert :size="32" aria-hidden="true" /><h3>这一天的简报未能生成</h3><p>模拟新闻来源读取失败。这与“没有合格新闻”不同，没有发送邮件。</p><a class="button secondary" href="#agent">查看运行详情</a>
+      <CircleAlert :size="32" aria-hidden="true" /><h3>这一天的简报未能生成</h3><p>模拟新闻来源读取失败。这与“没有合格新闻”不同，没有发送邮件。</p><a v-if="historical" class="button secondary" href="#today">返回每日简报</a><button v-else class="button secondary" @click="$emit('run')">重新生成演示简报</button>
     </div>
     <template v-else>
       <div v-if="brief.delivery === 'failed'" class="feedback error" role="status">模拟邮件发送失败，内容已保存。<button class="text-button" :disabled="running" @click="$emit('retry')">重试投递</button></div>
