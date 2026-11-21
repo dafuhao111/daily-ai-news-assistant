@@ -6,19 +6,18 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
+from app.news.service import NewsService
 from app.tools.commands import run_restricted_command
 from app.tools.context import ToolContext, ToolFailure
-from app.tools.filesystem import (
-    list_directory,
-    read_text_file,
-    search_text,
-    write_draft,
-)
+from app.tools.filesystem import list_directory, read_text_file, search_text, write_draft
 from app.tools.schemas import (
     BashArguments,
+    FetchArticleArguments,
+    FetchRSSArguments,
     ListDirArguments,
     ReadFileArguments,
     SearchContentArguments,
+    SearchNewsArguments,
     ToolArguments,
     WriteFileArguments,
 )
@@ -42,11 +41,17 @@ class ToolResult:
         content = json.dumps(self.to_dict(), ensure_ascii=False, separators=(",", ":"))
         if len(content.encode("utf-8")) <= self.MAX_MODEL_CONTENT_BYTES:
             return content
-        return json.dumps(
-            {"ok": self.ok, "data": {"truncated": True, "preview": content[:1200]}},
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        preview = content[:2500]
+        while preview:
+            bounded = json.dumps(
+                {"ok": self.ok, "data": {"truncated": True, "preview": preview}},
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            if len(bounded.encode("utf-8")) <= self.MAX_MODEL_CONTENT_BYTES:
+                return bounded
+            preview = preview[: len(preview) * 3 // 4]
+        return '{"ok":false,"error":"tool_result_too_large"}'
 
 
 ToolHandler = Callable[[BaseModel, ToolContext], dict[str, Any]]
@@ -108,8 +113,9 @@ class ToolRegistry:
             return ToolResult(ok=False, error_code="tool_failed")
 
 
-def create_default_registry() -> ToolRegistry:
+def create_default_registry(news_service: NewsService | None = None) -> ToolRegistry:
     registry = ToolRegistry()
+    news = news_service or NewsService()
     registry.register(
         ToolDefinition(
             name="list_dir",
@@ -148,6 +154,30 @@ def create_default_registry() -> ToolRegistry:
             description="Submit a narrowly allow-listed file validation command; command execution is disabled until Windows isolation is verified.",
             arguments=BashArguments,
             handler=lambda args, context: run_restricted_command(args.command, context),
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="fetch_rss",
+            description="Fetch entries from enabled, preconfigured RSS source IDs; the caller cannot provide feed URLs.",
+            arguments=FetchRSSArguments,
+            handler=lambda args, context: news.fetch_rss_tool(args.source_ids, context),
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="search_news",
+            description="Search only the RSS candidate items already fetched in this task; does not access the internet.",
+            arguments=SearchNewsArguments,
+            handler=lambda args, context: news.search_news_tool(args.query, args.limit, context),
+        )
+    )
+    registry.register(
+        ToolDefinition(
+            name="fetch_article",
+            description="Fetch readable text for an article ID returned by this task's RSS tools; arbitrary URLs are not accepted.",
+            arguments=FetchArticleArguments,
+            handler=lambda args, context: news.fetch_article_tool(args.article_id, context),
         )
     )
     return registry

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import re
 import time
@@ -91,6 +92,22 @@ def _result_summary(result: ToolResult) -> str:
 
 def _message_text(message: AIMessage) -> str:
     return message.text.strip()
+
+
+def _task_system_prompt(context: ToolContext) -> str:
+    sources = [
+        {
+            "source_id": source.source_id,
+            "name": source.name,
+            "category": source.category,
+        }
+        for source in context.news_sources
+        if source.enabled
+    ]
+    catalog = json.dumps(sources, ensure_ascii=False, separators=(",", ":"))
+    return (
+        f"{SYSTEM_PROMPT}\nAvailable configured RSS sources (IDs only; never invent IDs): {catalog}"
+    )
 
 
 def _tool_calls(message: AIMessage) -> list[dict[str, Any]]:
@@ -357,7 +374,10 @@ class AgentRunner:
         events: list[AgentTraceEvent] = []
         usage: dict[str, int | None] = {"input_tokens": None, "output_tokens": None}
         initial_state: AgentState = {
-            "messages": [SystemMessage(content=SYSTEM_PROMPT), HumanMessage(content=request.task)],
+            "messages": [
+                SystemMessage(content=_task_system_prompt(context)),
+                HumanMessage(content=request.task),
+            ],
             "turn": 0,
             "tool_rounds": 0,
             "status": "running",

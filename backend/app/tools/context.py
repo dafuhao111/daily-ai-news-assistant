@@ -1,14 +1,3 @@
-from dataclasses import dataclass
-from pathlib import Path
+from app.core.task_context import ToolContext, ToolFailure
 
-
-@dataclass(frozen=True)
-class ToolContext:
-    run_id: str
-    workspace_root: Path
-
-
-class ToolFailure(Exception):
-    def __init__(self, code: str):
-        super().__init__(code)
-        self.code = code
+__all__ = ["ToolContext", "ToolFailure"]

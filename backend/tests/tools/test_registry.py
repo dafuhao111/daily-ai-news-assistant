@@ -5,18 +5,23 @@ import pytest
 from app.tools.registry import ToolDefinition, ToolRegistry, ToolResult
 from app.tools.schemas import ListDirArguments
 
-EXPECTED_TOOLS = {"list_dir", "read_file", "search_content", "write_file", "bash"}
+REQUIRED_TOOLS = {"list_dir", "read_file", "search_content", "write_file", "bash"}
+NEWS_TOOLS = {"fetch_rss", "search_news", "fetch_article"}
 
 
 def test_all_required_tools_are_registered_and_exposed_as_function_schemas(tool_registry) -> None:
     schemas = tool_registry.model_schemas()
-    assert set(tool_registry.names()) == EXPECTED_TOOLS
-    assert {item["function"]["name"] for item in schemas} == EXPECTED_TOOLS
+    assert REQUIRED_TOOLS <= set(tool_registry.names())
+    assert REQUIRED_TOOLS | NEWS_TOOLS <= {item["function"]["name"] for item in schemas}
     for schema in schemas:
         assert schema["type"] == "function"
         assert schema["function"]["description"]
         assert schema["function"]["parameters"]["type"] == "object"
         assert schema["function"]["parameters"]["additionalProperties"] is False
+    schemas_by_name = {item["function"]["name"]: item["function"] for item in schemas}
+    assert set(schemas_by_name["fetch_rss"]["parameters"]["properties"]) == {"source_ids"}
+    assert set(schemas_by_name["fetch_article"]["parameters"]["properties"]) == {"article_id"}
+    assert "only the RSS candidate" in schemas_by_name["search_news"]["description"]
 
 
 def test_duplicate_tool_names_are_rejected() -> None:

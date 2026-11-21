@@ -11,6 +11,8 @@ dependencies = [
   "alembic==1.18.4",
   "email-validator==2.2.0",
   "fastapi==0.141.1",
+  "feedparser==6.0.14",
+  "httpx==0.28.1",
   "langchain-core==1.7.7",
   "langchain-openai==1.7.4",
   "langgraph==1.2.24",
@@ -37,7 +39,10 @@ include = ["app*"]
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-ra"
-markers = ["real_llm: requires explicit opt-in and a configured model endpoint"]
+markers = [
+  "real_llm: requires explicit opt-in and a configured model endpoint",
+  "live_rss: requires explicit opt-in and configured public RSS sources",
+]
 
 [tool.ruff]
 line-length = 100

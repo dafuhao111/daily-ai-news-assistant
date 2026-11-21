@@ -6,6 +6,7 @@
 !.env.example
 !.env.*.example
 .envrc
+backend/config/rss_sources.json
 
 # 密钥、凭据和 Token（真实秘密不得写入示例文件）
 secrets/

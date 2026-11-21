@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
     app_env: str = "development"
     api_prefix: str = "/api/v1"
+    rss_sources_file: str = "config/rss_sources.json"
     llm_base_url: str | None = None
     llm_api_key: SecretStr | None = None
     llm_model: str | None = None

@@ -52,6 +52,9 @@ def test_different_model_tool_calls_produce_different_traces(make_runner, agent_
         "search_content",
         "write_file",
         "bash",
+        "fetch_rss",
+        "search_news",
+        "fetch_article",
     }
     assert {item["function"]["name"] for item in read_model.schemas} == {
         "list_dir",
@@ -59,6 +62,9 @@ def test_different_model_tool_calls_produce_different_traces(make_runner, agent_
         "search_content",
         "write_file",
         "bash",
+        "fetch_rss",
+        "search_news",
+        "fetch_article",
     }
 
 
@@ -79,6 +85,33 @@ def test_model_can_repeat_a_tool_and_decide_when_to_stop(make_runner, agent_cont
     assert [message.tool_call_id for message in tool_results] == ["list-inputs", "list-history"]
 
 
+def test_news_source_catalog_passes_ids_without_feed_urls(make_runner, agent_context) -> None:
+    from app.news.schemas import RSSSource
+    from app.tools import ToolContext
+
+    source = RSSSource(
+        source_id="official-ai",
+        name="Official AI Updates",
+        feed_url="https://feeds.public.example/private-path.rss",
+        allowed_hosts=["feeds.public.example"],
+        category="AI engineering",
+    )
+    context = ToolContext(
+        run_id="catalog-check",
+        workspace_root=agent_context.workspace_root,
+        news_sources=(source,),
+    )
+    runner, model = make_runner([AIMessage(content="No news lookup was needed.")])
+    result = run_agent(runner, "Wait for my actual request.", context)
+    system_message = model.observed_messages[0][0].content
+
+    assert result.status == "completed"
+    assert "official-ai" in system_message
+    assert "Official AI Updates" in system_message
+    assert "AI engineering" in system_message
+    assert source.feed_url not in system_message
+
+
 def test_real_chat_model_adapter_binds_all_registered_function_schemas() -> None:
     from app.core.config import Settings
 
@@ -96,7 +129,37 @@ def test_real_chat_model_adapter_binds_all_registered_function_schemas() -> None
         "search_content",
         "write_file",
         "bash",
+        "fetch_rss",
+        "search_news",
+        "fetch_article",
     }
+
+
+def test_source_catalog_prompt_includes_ids_but_not_feed_urls(make_runner, agent_context) -> None:
+    from app.news.schemas import RSSSource
+    from app.tools import ToolContext
+
+    source = RSSSource(
+        source_id="official-ai",
+        name="Official AI Updates",
+        feed_url="https://feeds.public.example/private-path.rss",
+        allowed_hosts=["feeds.public.example"],
+        category="AI engineering",
+    )
+    context = ToolContext(
+        run_id="catalog-check",
+        workspace_root=agent_context.workspace_root,
+        news_sources=(source,),
+    )
+    runner, model = make_runner([AIMessage(content="No news lookup needed.")])
+    result = run_agent(runner, "Wait for my actual request.", context)
+    system_message = model.observed_messages[0][0].content
+
+    assert result.status == "completed"
+    assert "official-ai" in system_message
+    assert "Official AI Updates" in system_message
+    assert "AI engineering" in system_message
+    assert source.feed_url not in system_message
 
 
 def test_tool_result_is_returned_with_matching_call_id(make_runner, agent_context) -> None:

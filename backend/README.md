@@ -45,6 +45,22 @@ The `bash` tool is registered and validates a single `python -m json.tool <works
 
 Set `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` in the untracked `.env` for an OpenAI-compatible endpoint that supports multi-turn Tool Calling. Use the provider's actual model ID. An ordinary text-only endpoint is not sufficient. The API key stays server-side and is never part of the task context or trace. Limits default to 45 seconds per model request, 8 tool rounds, 8 calls per model response, and 300 seconds per task. Provider token usage is recorded only when the response supplies it; no invoice cost is inferred.
 
+## RSS sources
+
+The RSS tools use a local JSON source catalog. No source is preselected because the product design leaves the actual feeds for confirmation. Copy `config/rss_sources.example.json` to `config/rss_sources.json`, then add only feeds you have chosen and checked. The live file is ignored by Git. Each entry contains `source_id`, `name`, `feed_url`, `allowed_hosts`, `category`, and `enabled`. `allowed_hosts` must include the configured feed host and any approved article hosts. Only enabled source IDs, names, and categories are shown to the model; feed URLs are never included in its prompt.
+
+`fetch_rss` reads only those configured feeds, with a 2 MiB response cap, bounded redirects, timeouts, DNS/IP checks, and exact allowed-host checks. `search_news` searches only candidates loaded for the current task and does not use a third-party search service. `fetch_article` accepts only an article ID from that task and uses the source's allowed hosts. RSS and public article access normally need no account or paid search API; a feed that requires credentials is not supported by this configuration. DNS is checked before each request and redirect, but a same-host DNS rebinding race remains a Windows/network-layer limitation.
+
+The `rss_source` and `news_item` tables persist configured sources, fetched material, article text, canonical URL hashes, and an inclusion marker. Article text is stored with a 24 KiB cap; `fetch_article` returns 2,500-character chunks on repeated model calls and reports when the source text was truncated. The repository returns previously fetched items again after a failed task until a later brief transaction marks them included. When the task runner passes a `NewsRepository` into `create_tool_context`, exact URL duplicates are suppressed across tasks. `mark_task_success` is designed to update inclusion markers and source cursors inside the same transaction that saves a successful brief; it must not be called for failed or partial runs.
+
+Mock HTTP tests use `httpx.MockTransport` and do not access the network. To check a real configured feed, opt in explicitly:
+
+```powershell
+$env:RUN_LIVE_RSS_TESTS = "1"
+uv run pytest -m live_rss tests/integration/test_live_rss.py
+Remove-Item Env:RUN_LIVE_RSS_TESTS
+```
+
 Mock-driven loop tests run with the normal suite and make no network requests. A real endpoint path is available, but requires explicit opt-in because it can incur provider charges:
 
 ```powershell
