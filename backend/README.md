@@ -14,6 +14,8 @@ Copy-Item .env.example .env
 
 Before starting, create the `daily_ai_news` database with `utf8mb4` and a dedicated least-privilege MySQL account. Replace the placeholder `DATABASE_URL` in the untracked `.env`; do not use MySQL root or commit credentials.
 
+The locked `pymysql[rsa]` dependency includes the cryptography support required for MySQL 8 `caching_sha2_password` authentication. Do not weaken the database account's authentication plugin to work around a missing dependency.
+
 ## Migrations and run
 
 ```powershell
@@ -68,7 +70,9 @@ The `bash` tool is registered and validates a single `python -m json.tool <works
 
 `app.agent.AgentRunner` binds the registry's Function Schemas to a LangChain chat model and runs an explicit LangGraph decision loop. Each returned Tool Call is validated and dispatched by the registry; its result is sent back as a `ToolMessage` with the same call ID. Read-only batches execute serially. A batch that mixes a side-effecting tool (`write_file` or `bash`) with another call is rejected as `unsafe_parallel_batch`.
 
-Set `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` in the untracked `.env` for an OpenAI-compatible endpoint that supports multi-turn Tool Calling. Use the provider's actual model ID. An ordinary text-only endpoint is not sufficient. The API key stays server-side and is never part of the task context or trace. Limits default to 45 seconds per model request, 8 tool rounds, 8 calls per model response, and 300 seconds per task. Provider token usage is recorded only when the response supplies it; no invoice cost is inferred.
+Set `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` in the untracked `.env` for an endpoint supporting multi-turn Tool Calling. `LLM_API_PROTOCOL` selects `chat_completions` (default) or `responses`; use the provider's documented base URL, since some gateways use a root endpoint rather than `/v1`. `LLM_MAX_OUTPUT_TOKENS` bounds each response (default 2,048); this is not a cumulative project budget. Both protocols use the same tool registry and Agent loop. Model requests set `store=false` and disable SDK retries. The API key stays server-side and is never part of the task context or trace. Limits default to 45 seconds per model request, 8 tool rounds, 8 calls per model response, and 300 seconds per task. Provider token usage is recorded only when the response supplies it; no invoice cost is inferred.
+
+For this installation, the [Happy Code help center](https://cn.happycodeapi.com/help-center) documents a Responses endpoint: `https://happycodeapi.com` for regular access, with `https://cn.happycodeapi.com` as a backup. On 2026-11-22 the backup returned the configured `gpt-6.1-sol` model and passed a real `list_dir` Tool Call/result/final-answer round trip. The primary timed out and remains unverified. The current untracked local configuration uses the backup root URL, `LLM_API_PROTOCOL=responses`, and keeps scheduling disabled during setup. Never copy a Codex application's full client configuration into this project's `.env`; only the relevant endpoint, protocol, model, and local key are required.
 
 ## RSS sources
 

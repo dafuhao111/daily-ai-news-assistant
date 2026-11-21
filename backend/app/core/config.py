@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_api_key: SecretStr | None = None
     llm_model: str | None = None
+    llm_api_protocol: Literal["chat_completions", "responses"] = "chat_completions"
+    llm_max_output_tokens: int = Field(default=2048, ge=128, le=16384)
     agent_model_timeout_seconds: float = Field(default=45.0, gt=0, le=300)
     agent_max_tool_rounds: int = Field(default=8, ge=1, le=32)
     agent_max_calls_per_round: int = Field(default=8, ge=1, le=32)

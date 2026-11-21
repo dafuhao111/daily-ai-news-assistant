@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit
 
+import httpx
 from langchain_openai import ChatOpenAI
 
 from app.core.config import Settings
@@ -9,7 +10,9 @@ class ModelNotConfiguredError(RuntimeError):
     pass
 
 
-def create_chat_model(settings: Settings) -> ChatOpenAI:
+def create_chat_model(
+    settings: Settings, *, http_async_client: httpx.AsyncClient | None = None
+) -> ChatOpenAI:
     if not settings.llm_base_url or not settings.llm_model or not settings.llm_api_key:
         raise ModelNotConfiguredError("llm_not_configured")
     api_key = settings.llm_api_key.get_secret_value().strip()
@@ -37,4 +40,8 @@ def create_chat_model(settings: Settings) -> ChatOpenAI:
         base_url=settings.llm_base_url.strip(),
         timeout=settings.agent_model_timeout_seconds,
         max_retries=0,
+        max_tokens=settings.llm_max_output_tokens,
+        use_responses_api=settings.llm_api_protocol == "responses",
+        store=False,
+        http_async_client=http_async_client,
     )
