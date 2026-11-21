@@ -1,0 +1,52 @@
+:root {
+  --font-body: 'Segoe UI', 'Microsoft YaHei', 'PingFang SC', sans-serif;
+  --font-mono: 'Cascadia Code', Consolas, monospace;
+  --canvas: #f5f5f0;
+  --sidebar: #eeefe8;
+  --surface: #fdfdf9;
+  --input: #fdfdf9;
+  --text: #253a34;
+  --body-secondary: #4f605a;
+  --muted: #5e6d65;
+  --border: #dfe4da;
+  --border-strong: #bec9bd;
+  --accent: #28624e;
+  --accent-hover: #1c4e3d;
+  --accent-soft: #e9efe6;
+  --accent-border: #cbdac9;
+  --on-accent: #f8faf5;
+  --focus: #28624e;
+  --tag: #f0f2eb;
+  --banner: #f3efdf;
+  --banner-text: #706037;
+  --banner-border: #e4dcc1;
+  --error: #a23d32;
+  --error-soft: #f9eae5;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #17221e;
+    --sidebar: #1c2823;
+    --surface: #202e27;
+    --input: #1a2821;
+    --text: #e4ece3;
+    --body-secondary: #c3cfc1;
+    --muted: #a1b29f;
+    --border: #384b3d;
+    --border-strong: #62745e;
+    --accent: #a4d4ae;
+    --accent-hover: #c4e5c5;
+    --accent-soft: #2a4031;
+    --accent-border: #4c6950;
+    --on-accent: #1c3425;
+    --focus: #b4e0b9;
+    --tag: #29392d;
+    --banner: #393824;
+    --banner-text: #ddd3a1;
+    --banner-border: #5a5639;
+    --error: #f3afa0;
+    --error-soft: #4a302a;
+  }
+}
