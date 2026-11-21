@@ -53,6 +53,22 @@ The RSS tools use a local JSON source catalog. No source is preselected because 
 
 The `rss_source` and `news_item` tables persist configured sources, fetched material, article text, canonical URL hashes, and an inclusion marker. Article text is stored with a 24 KiB cap; `fetch_article` returns 2,500-character chunks on repeated model calls and reports when the source text was truncated. The repository returns previously fetched items again after a failed task until a later brief transaction marks them included. When the task runner passes a `NewsRepository` into `create_tool_context`, exact URL duplicates are suppressed across tasks. `mark_task_success` is designed to update inclusion markers and source cursors inside the same transaction that saves a successful brief; it must not be called for failed or partial runs.
 
+## Brief generation
+
+`app.application.briefs.BriefGenerationService` accepts a frozen preference snapshot and loads only the task user's non-secret identity fields (display name and optional role) from the profile; it never reads the email field. Topics guide relevance, keywords affect priority, and excluded terms are enforced against the source title, source summary, and generated summary. The model chooses whether to fetch feeds, search candidates, read article text, repeat a tool, or finish; the service does not impose a news-tool sequence.
+
+The model returns only article IDs, Chinese summaries, relevance reasons, and an empty-result reason. The service rejects malformed output, duplicate or undisclosed IDs, missing source evidence, disallowed source hosts, and excluded-keyword matches. It fills titles, source names, URLs, and publication evidence from the task's actual RSS candidates. Saved brief JSON separates the generated summary from a bounded source excerpt. The brief, task status, redacted tool-call diagnostics, usage data, and selected-news inclusion markers commit in one transaction. Empty briefs are saved with status `empty` only after the task has successful RSS evidence or recovered candidates; otherwise the task is recorded as failed. Tool-call diagnostics store argument summaries and short results, never raw tool arguments or prompts.
+
+The generator is an application service for the scheduler and API integration stages; this stage does not expose a user-facing run endpoint. The Mock LLM tests cover distinct tool-choice traces for distinct preference snapshots. An optional real-model brief path uses a mocked RSS transport and calls only the configured LLM endpoint:
+
+```powershell
+$env:RUN_REAL_LLM_TESTS = "1"
+uv run pytest -m real_llm tests/application/test_real_brief.py
+Remove-Item Env:RUN_REAL_LLM_TESTS
+```
+
+This request may incur model charges. It does not contact a live RSS feed or send a push notification.
+
 Mock HTTP tests use `httpx.MockTransport` and do not access the network. To check a real configured feed, opt in explicitly:
 
 ```powershell
@@ -65,11 +81,11 @@ Mock-driven loop tests run with the normal suite and make no network requests. A
 
 ```powershell
 $env:RUN_REAL_LLM_TESTS = "1"
-uv run pytest -m real_llm tests/integration/test_real_llm.py
+uv run pytest -m real_llm tests/integration/test_real_llm.py tests/application/test_real_brief.py
 Remove-Item Env:RUN_REAL_LLM_TESTS
 ```
 
-That test asks the configured model to call `list_dir` once, checks the real Tool Calling round trip, and then checks the final response. It is skipped unless the opt-in flag and non-placeholder endpoint, model ID, and API key are configured.
+These tests check a real Tool Calling round trip and structured brief generation. They are skipped unless the opt-in flag and non-placeholder endpoint, model ID, and API key are configured.
 
 ## Tests
 

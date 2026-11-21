@@ -20,6 +20,9 @@ def test_initial_migration_creates_profile_tables(tmp_path: Path) -> None:
         "subscription_preferences",
         "rss_source",
         "news_item",
+        "task_run",
+        "brief",
+        "tool_call",
         "alembic_version",
     } <= tables
     assert "recipient_email" in {
@@ -36,4 +39,12 @@ def test_initial_migration_creates_profile_tables(tmp_path: Path) -> None:
         "content_truncated",
         "included_at",
     } <= news_columns
+    assert {"idempotency_key", "preferences_snapshot", "usage_json"} <= {
+        column["name"] for column in inspect(engine).get_columns("task_run")
+    }
+    assert {"content_json", "revision"} <= {
+        column["name"] for column in inspect(engine).get_columns("brief")
+    }
+    tool_call_columns = {column["name"] for column in inspect(engine).get_columns("tool_call")}
+    assert {"args_redacted", "error_code", "result_summary", "duration_ms"} <= tool_call_columns
     engine.dispose()

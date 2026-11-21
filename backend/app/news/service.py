@@ -157,14 +157,17 @@ class NewsService:
         for source_id in source_ids:
             source = sources.get(source_id)
             if source is None:
+                context.news_source_outcomes[source_id] = "source_not_found"
                 errors.append({"source_id": source_id, "error": "source_not_found"})
                 continue
             if not source.enabled:
+                context.news_source_outcomes[source_id] = "source_disabled"
                 errors.append({"source_id": source_id, "error": "source_disabled"})
                 continue
             try:
                 articles, duplicates = self.fetch_rss(source, context)
             except ToolFailure as error:
+                context.news_source_outcomes[source_id] = error.code
                 logger.warning(
                     "rss source fetch failed (run_id=%s, source_id=%s, error_code=%s)",
                     context.run_id,
@@ -193,6 +196,7 @@ class NewsService:
                 _active, included_skipped = repository.save_candidates(source, articles)
                 duplicate_count += included_skipped
                 articles = repository.pending_candidates(source_id)
+            context.news_source_outcomes[source_id] = "succeeded"
             available = []
             for article in articles:
                 if article.article_id in context.news_candidates:
@@ -221,6 +225,7 @@ class NewsService:
                     break
             if len(reported) >= MAX_RSS_ITEMS_PER_TOOL_RESULT:
                 break
+        context.news_visible_article_ids.update(article.article_id for article in reported)
         total_items = sum(len(articles) for articles in articles_by_source)
         truncated = total_items > len(reported)
         return {
@@ -234,6 +239,7 @@ class NewsService:
     def search_news_tool(self, query: str, limit: int, context: ToolContext) -> dict[str, object]:
         articles = self.search_news(query, limit, context)
         total_matches = self.count_news_matches(query, context)
+        context.news_visible_article_ids.update(article.article_id for article in articles)
         return {
             "items": [_rss_item_summary(article) for article in articles],
             "match_count": total_matches,
@@ -242,6 +248,7 @@ class NewsService:
 
     def fetch_article_tool(self, article_id: str, context: ToolContext) -> dict[str, object]:
         article, content, chunk_index, more_chunks = self.fetch_article(article_id, context)
+        context.news_visible_article_ids.add(article.article_id)
         return {
             "article_id": article.article_id,
             "title": article.title,
