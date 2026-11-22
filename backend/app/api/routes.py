@@ -1,8 +1,9 @@
 import logging
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request
-from sqlalchemy import text
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,14 @@ from app.application.deliveries import DeliveryError
 from app.application.mail_tests import MailTestError
 from app.application.preferences import get_preferences, save_preferences
 from app.application.profiles import get_profile, save_profile
+from app.application.reading import (
+    HistoryPage,
+    ReadingBrief,
+    WorkspaceStatus,
+    history_page,
+    reading_brief,
+    run_status,
+)
 from app.application.tasks import LOCAL_USER_ID, TaskQueueError
 from app.db.session import get_session
 from app.models.brief import TaskRunRecord
@@ -87,12 +96,53 @@ def get_run_status(run_id: str, session: SessionDep) -> RunStatusRead:
     run = session.get(TaskRunRecord, run_id)
     if run is None or run.user_id != LOCAL_USER_ID:
         raise HTTPException(status_code=404, detail="run_not_found")
-    return RunStatusRead(
-        run_id=run.id,
-        report_date=run.report_date,
-        status=run.status,
-        error_code=run.error_code,
-        finished_at=run.finished_at,
+    return run_status(run)
+
+
+@router.get("/briefs/latest", response_model=ReadingBrief | None)
+def get_latest_brief(session: SessionDep) -> ReadingBrief | None:
+    return reading_brief(session)
+
+
+@router.get("/briefs/{brief_id}", response_model=ReadingBrief)
+def get_brief(brief_id: int, session: SessionDep) -> ReadingBrief | None:
+    return reading_brief(session, brief_id)
+
+
+@router.get("/history", response_model=HistoryPage)
+def get_history(
+    session: SessionDep,
+    report_date: date | None = None,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 30,
+) -> HistoryPage:
+    return history_page(session, report_date, offset, limit)
+
+
+@router.get("/status", response_model=WorkspaceStatus)
+def get_workspace_status(request: Request, session: SessionDep) -> WorkspaceStatus:
+    runs = select(TaskRunRecord).where(TaskRunRecord.user_id == LOCAL_USER_ID)
+    latest = session.scalar(
+        runs.order_by(TaskRunRecord.started_at.desc(), TaskRunRecord.id.desc()).limit(1)
+    )
+    active = session.scalar(
+        runs.where(TaskRunRecord.status.in_(("queued", "running")))
+        .order_by(TaskRunRecord.started_at.desc())
+        .limit(1)
+    )
+    daily = request.app.state.daily_scheduler
+    scheduler = daily.scheduler if daily else None
+    running = bool(scheduler and scheduler.running)
+    job = scheduler.get_job(f"daily:{LOCAL_USER_ID}") if running else None
+    mailer = request.app.state.smtp_mailer
+    return WorkspaceStatus(
+        profile_configured=session.get(UserProfile, LOCAL_USER_ID) is not None,
+        preferences_configured=session.get(SubscriptionPreferences, LOCAL_USER_ID) is not None,
+        smtp_configured=mailer.is_configured,
+        scheduler_running=running,
+        next_run_at=job.next_run_time if job else None,
+        latest_run=run_status(latest) if latest else None,
+        active_run=run_status(active) if active else None,
     )
 
 
