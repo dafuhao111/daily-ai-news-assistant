@@ -151,7 +151,7 @@ def create_default_registry(news_service: NewsService | None = None) -> ToolRegi
     registry.register(
         ToolDefinition(
             name="bash",
-            description="Submit a narrowly allow-listed file validation command; command execution is disabled until Windows isolation is verified.",
+            description="Run only python -m json.tool on a bounded inputs/ or history/ JSON material. Arbitrary shell commands, flags and programs are denied.",
             arguments=BashArguments,
             handler=lambda args, context: run_restricted_command(args.command, context),
         )
