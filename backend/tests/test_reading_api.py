@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from types import SimpleNamespace
 
-from app.models.brief import BriefRecord, TaskRunRecord
+from app.diagnostics import inspect_run
+from app.models.brief import BriefRecord, TaskRunRecord, ToolCallRecord
 from app.models.delivery import MailDeliveryRecord
 from app.models.profile import UserProfile
 
@@ -123,3 +124,28 @@ def test_status_reports_actual_scheduler_job_and_active_run(client, local_header
     assert status["next_run_at"] == "2026-11-23T08:30:00+08:00"
     assert status["active_run"]["run_id"] == "run-1"
     client.app.state.daily_scheduler = None
+
+
+def test_developer_diagnostics_separates_model_calls_results_and_final_status(session_factory):
+    seed_history(session_factory)
+    with session_factory.begin() as session:
+        session.add(
+            ToolCallRecord(
+                run_id="run-1",
+                attempt=1,
+                iteration=1,
+                call_id="model-call-1",
+                tool_name="fetch_rss",
+                args_redacted={"private": "hidden args"},
+                status="succeeded",
+                result_summary="private tool content",
+                duration_ms=5,
+            )
+        )
+    result = inspect_run(session_factory, "run-1")
+    assert result["model_tool_calls"][0]["call_id"] == "model-call-1"
+    assert result["tool_results"][0]["status"] == "succeeded"
+    assert result["final_result"] == {"status": "empty", "error_code": None, "brief_id": 1}
+    assert "hidden args" not in str(result)
+    assert "private tool content" not in str(result)
+    assert inspect_run(session_factory, "run-3") == {"error": "run_not_found"}
