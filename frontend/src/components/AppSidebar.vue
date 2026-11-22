@@ -17,13 +17,13 @@ const links = [
     <span class="sidebar-label">我的工作台</span>
     <nav aria-label="主导航">
       <a v-for="link in links" :key="link.id" :href="`#${link.id}`" :class="['nav-link', { active: page === link.id }]" :aria-current="page === link.id ? 'page' : undefined">
-        <component :is="link.icon" :size="19" aria-hidden="true" />{{ link.label }}<span v-if="link.id === 'agent'" class="nav-demo">模拟</span>
+        <component :is="link.icon" :size="19" aria-hidden="true" />{{ link.label }}
       </a>
     </nav>
     <div class="sidebar-bottom">
       <div class="local-note"><Radio :size="17" aria-hidden="true" /><span>本机 · 单人工作区</span></div>
       <p>每天少一点噪声，<br />多一点值得关注的信号。</p>
-      <a class="profile-link" href="#settings"><span class="avatar">{{ name?.slice(0, 1) || '你' }}</span><span>{{ name }}<small>演示资料</small></span><ArrowUpRight :size="16" aria-hidden="true" /></a>
+      <a class="profile-link" href="#settings"><span class="avatar">{{ name?.slice(0, 1) || '你' }}</span><span>{{ name || '设置个人资料' }}<small>身份与订阅</small></span><ArrowUpRight :size="16" aria-hidden="true" /></a>
     </div>
   </aside>
 </template>

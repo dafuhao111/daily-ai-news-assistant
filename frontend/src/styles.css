@@ -53,6 +53,14 @@ h1 { font-size: clamp(25px, 2.5vw, 32px); font-weight: 650; letter-spacing: -1px
 .text-button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; border: 0; padding: 5px 0; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; }
 .icon-button { width: 44px; height: 44px; display: inline-flex; justify-content: center; align-items: center; background: transparent; border: 0; color: var(--muted); border-radius: var(--radius-sm); }
 .today-layout { display: grid; grid-template-columns: minmax(0, 1fr) 246px; align-items: start; gap: 28px; }
+.today-layout > .run-summary { grid-column: 1 / -1; }
+.run-summary > div { min-width: 0; overflow-wrap: anywhere; }
+.run-summary > .icon-button { margin-left: auto; flex-shrink: 0; }
+.history-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 24px; }
+.history-filter input[type="date"] { width: 200px; max-width: 100%; }
+.date-list { display: grid; gap: 8px; max-height: 70vh; overflow-y: auto; }
+.date-button { width: 100%; }
+.identity-save { margin-top: 20px; }
 .latest-run-error { grid-column: 1 / -1; margin-top: 0; }
 .latest-run-success { grid-column: 1 / -1; margin-top: 0; }
 .brief-view { min-width: 0; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }

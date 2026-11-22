@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
     app_env: str = "development"
     api_prefix: str = "/api/v1"
+    frontend_dist_dir: str | None = None
     rss_sources_file: str = "config/rss_sources.json"
     agent_workspace_dir: str = Field(default_factory=_default_agent_workspace_dir)
     scheduler_enabled: bool = True

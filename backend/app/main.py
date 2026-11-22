@@ -1,5 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import cast
 
 from fastapi import FastAPI, Request
@@ -7,6 +8,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from starlette.responses import JSONResponse
+from starlette.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.application.deliveries import MailDeliveryService
@@ -80,6 +82,13 @@ def create_app(
     app.state.daily_scheduler = daily_scheduler
     app.add_middleware(LocalRequestMiddleware)
     app.include_router(router, prefix=app_settings.api_prefix)
+    frontend_dist = (
+        Path(app_settings.frontend_dist_dir)
+        if app_settings.frontend_dist_dir
+        else Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    )
+    if (frontend_dist / "index.html").is_file():
+        app.mount("/", StaticFiles(directory=frontend_dist, html=True), name="frontend")
 
     @app.exception_handler(SQLAlchemyError)
     async def database_error_handler(_request: Request, error: SQLAlchemyError) -> JSONResponse:

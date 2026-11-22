@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { effectScope } from 'vue'
-import { useDemo, validatePreferences } from '../composables/useDemo'
-import { defaults, makeTrace, STORAGE_KEY } from '../data/demo'
+import { useDemo, validatePreferences } from '../../demo/composables/useDemo'
+import { defaults, makeTrace, STORAGE_KEY } from '../../demo/data/demo'
 
 let scope
 function setup(storage = localStorage) {
