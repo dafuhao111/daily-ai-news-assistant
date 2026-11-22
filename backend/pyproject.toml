@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools==80.9.0"]
+requires = ["setuptools==84.1.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "daily-ai-news-assistant"
 version = "0.1.0"
 description = "Local single-user AI news assistant API"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "alembic==1.18.4",
   "APScheduler==3.11.0",
@@ -18,8 +18,8 @@ dependencies = [
   "langchain-openai==1.7.4",
   "langgraph==1.2.24",
   "pydantic==2.14.4",
-  "pydantic-settings==2.13.1",
-  "python-dotenv==1.1.1",
+  "pydantic-settings==2.14.2",
+  "python-dotenv==1.2.2",
   "pymysql[rsa]==1.1.2",
   "sqlalchemy==2.0.51",
   "tzdata==2025.2",
@@ -43,6 +43,7 @@ addopts = "-ra"
 markers = [
   "real_llm: requires explicit opt-in and a configured model endpoint",
   "live_rss: requires explicit opt-in and configured public RSS sources",
+  "mysql: requires explicit opt-in for disposable records in the configured MySQL schema",
 ]
 
 [tool.ruff]
