@@ -7,8 +7,44 @@ import pytest
 from app.core.task_context import ToolFailure
 from app.news.config import load_rss_sources
 from app.news.schemas import RSSSource
-from app.news.service import NewsService, canonicalize_url
+from app.news.service import NewsService, _parse_published, canonicalize_url
 from app.tools import ToolContext, create_default_registry
+
+
+def test_live_transport_pins_validated_address_and_preserves_tls_hostname(monkeypatch, rss_source):
+    original_client = httpx.Client
+    observed = []
+    resolutions = []
+
+    def response(request):
+        observed.append(request)
+        return httpx.Response(
+            200, content=b"<rss version='2.0'><channel><title>Feed</title></channel></rss>"
+        )
+
+    def client_factory(**kwargs):
+        kwargs["transport"] = httpx.MockTransport(response)
+        return original_client(**kwargs)
+
+    def resolve(host, port):
+        resolutions.append((host, port))
+        return ["93.184.216.34"] if len(resolutions) == 1 else ["127.0.0.1"]
+
+    monkeypatch.setattr("app.news.service.httpx.Client", client_factory)
+    service = NewsService(resolver=resolve)
+    service._download(rss_source.feed_url, rss_source.allowed_hosts)
+    assert len(resolutions) == 1
+    assert observed[0].url.host == "93.184.216.34"
+    assert observed[0].headers["host"] == "feeds.example.test"
+    assert observed[0].extensions["sni_hostname"] == "feeds.example.test"
+
+
+def test_publication_dates_without_explicit_timezone_are_not_presented_as_utc():
+    value = "2026-11-22 08:30:00"
+    raw, utc, field = _parse_published(
+        {"published": value, "published_parsed": (2026, 11, 22, 8, 30, 0, 6, 326, 0)}
+    )
+    assert (raw, utc, field) == (value, None, "published")
 
 
 def test_fetch_rss_preserves_source_links_and_publication_data(news_registry, news_context) -> None:

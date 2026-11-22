@@ -32,6 +32,8 @@ class AgentLimits(BaseModel):
     model_timeout_seconds: float = Field(default=45.0, gt=0, le=300)
     max_tool_rounds: int = Field(default=8, ge=1, le=32)
     max_calls_per_round: int = Field(default=8, ge=1, le=32)
+    max_model_input_bytes: int = Field(default=128_000, ge=1024, le=1_000_000)
+    max_total_input_bytes: int = Field(default=512_000, ge=1024, le=4_000_000)
     task_timeout_seconds: float = Field(default=300.0, gt=0, le=900)
 
     @classmethod
@@ -40,6 +42,8 @@ class AgentLimits(BaseModel):
             model_timeout_seconds=settings.agent_model_timeout_seconds,
             max_tool_rounds=settings.agent_max_tool_rounds,
             max_calls_per_round=settings.agent_max_calls_per_round,
+            max_model_input_bytes=settings.agent_max_model_input_bytes,
+            max_total_input_bytes=settings.agent_max_total_input_bytes,
             task_timeout_seconds=settings.agent_task_timeout_seconds,
         )
 
@@ -142,6 +146,7 @@ class AgentRunner:
     ) -> None:
         self.registry = registry
         self.limits = limits or AgentLimits()
+        self._owned_http_client = getattr(model, "_daily_owned_http_client", None)
         self.model = model.bind_tools(registry.model_schemas(), tool_choice="auto")
 
     @classmethod
@@ -163,6 +168,11 @@ class AgentRunner:
         events: list[AgentTraceEvent],
         usage: dict[str, int | None],
     ):
+        submitted_input_bytes = 0
+        schema_bytes = len(
+            json.dumps(self.registry.model_schemas(), ensure_ascii=False).encode("utf-8")
+        )
+
         def emit(
             *,
             turn: int,
@@ -209,14 +219,35 @@ class AgentRunner:
             return observed[0], observed[1]
 
         async def decide(state: AgentState) -> dict[str, Any]:
+            nonlocal submitted_input_bytes
             started = time.monotonic()
             next_turn = state["turn"] + 1
+            message_bytes = (
+                len(
+                    json.dumps(
+                        [message.model_dump(mode="json") for message in state["messages"]],
+                        ensure_ascii=False,
+                    ).encode("utf-8")
+                )
+                + schema_bytes
+            )
+            if (
+                message_bytes > self.limits.max_model_input_bytes
+                or submitted_input_bytes + message_bytes > self.limits.max_total_input_bytes
+            ):
+                emit(turn=next_turn, kind="termination", status="input_limit")
+                return {
+                    "status": "limited",
+                    "termination_reason": "input_limit",
+                    "pending_calls": [],
+                }
+            submitted_input_bytes += message_bytes
             try:
                 response = await asyncio.wait_for(
                     self.model.ainvoke(state["messages"]),
                     timeout=self.limits.model_timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 emit(turn=next_turn, kind="model_decision", status="model_timeout")
                 return {
                     "turn": next_turn,
@@ -370,6 +401,13 @@ class AgentRunner:
         return graph.compile()
 
     async def run(self, task: str | AgentTask, context: ToolContext) -> AgentRunResult:
+        try:
+            return await self._run(task, context)
+        finally:
+            if self._owned_http_client is not None:
+                await self._owned_http_client.aclose()
+
+    async def _run(self, task: str | AgentTask, context: ToolContext) -> AgentRunResult:
         request = task if isinstance(task, AgentTask) else AgentTask(task=task)
         events: list[AgentTraceEvent] = []
         usage: dict[str, int | None] = {"input_tokens": None, "output_tokens": None}
@@ -395,7 +433,7 @@ class AgentRunner:
                 ),
                 timeout=self.limits.task_timeout_seconds,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             events.append(
                 AgentTraceEvent(
                     sequence=len(events) + 1,

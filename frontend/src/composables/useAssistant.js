@@ -105,10 +105,12 @@ export function useAssistant() {
     starting.value = true
     await perform(async () => {
       if (!pendingKey) setKey(crypto.randomUUID())
-      await api('/runs', { method: 'POST', body: {}, key: pendingKey })
+      const accepted = await api('/runs', { method: 'POST', body: {}, key: pendingKey })
       setKey(null)
       await refresh()
-      notice.value = '任务已提交，页面将自动更新后端执行状态。'
+      notice.value = ['completed', 'empty'].includes(accepted.status)
+        ? '今天已有完成的任务，已读取保存结果，未重复生成或发送。'
+        : '任务已提交，页面将自动更新后端执行状态。'
     })
     starting.value = false
   }

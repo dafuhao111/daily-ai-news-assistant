@@ -48,6 +48,7 @@ class SMTPMailer:
             raise SMTPDeliveryFailure("empty_brief_not_sendable", "failed")
         subject = f"每日 AI 新闻简报 | {brief.report_date.isoformat()}"
         lines = [f"{brief.report_date.isoformat()} 每日 AI 新闻简报", ""]
+        lines.extend(brief.warnings)
         for index, item in enumerate(brief.items, start=1):
             published = item.published_at_raw or "发布时间未提供/无法确认"
             lines.extend(

@@ -144,6 +144,46 @@ def task_context(tmp_path, run_id, source, repository) -> ToolContext:
     )
 
 
+def test_partial_source_failure_is_saved_as_user_visible_coverage_warning(
+    tmp_path,
+    session_factory,
+    rss_source,
+    response_handler,
+    public_resolver,
+):
+    ensure_user(session_factory)
+    broken = rss_source.model_copy(
+        update={"source_id": "broken-feed", "feed_url": "https://feeds.example.test/broken"}
+    )
+    context = task_context(tmp_path, "partial-sources", rss_source, None)
+    from dataclasses import replace
+
+    context = replace(context, news_sources=(rss_source, broken))
+
+    def transport(request):
+        return httpx.Response(503) if request.url.path == "/broken" else response_handler(request)
+
+    generator, _ = build_generator(
+        session_factory,
+        context,
+        [
+            tool_call(
+                "fetch_rss", {"source_ids": [rss_source.source_id, broken.source_id]}, "partial-rss"
+            ),
+            final_brief([article_id("/news/agent?id=1")]),
+        ],
+        transport=httpx.MockTransport(transport),
+        resolver=public_resolver,
+    )
+    result = asyncio.run(generator.generate(preferences(), context, REPORT_DATE))
+    assert result.run_status == "completed" and result.warnings == [
+        "部分新闻来源读取失败，本期覆盖范围有限。"
+    ]
+    with session_factory() as session:
+        saved = session.get(BriefRecord, result.id)
+        assert saved.content_json["warnings"] == result.warnings
+
+
 def test_model_decisions_drive_different_brief_traces_and_persist_evidence(
     tmp_path, session_factory, rss_source, news_repository, response_handler, public_resolver
 ) -> None:

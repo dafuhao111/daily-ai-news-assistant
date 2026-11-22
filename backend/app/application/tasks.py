@@ -76,7 +76,9 @@ class TaskCoordinator:
         run_id = str(uuid4())
         try:
             with self.session_factory.begin() as session:
-                profile = session.get(UserProfile, user_id)
+                profile = session.scalar(
+                    select(UserProfile).where(UserProfile.id == user_id).with_for_update()
+                )
                 preferences = session.get(SubscriptionPreferences, user_id)
                 if profile is None:
                     raise TaskQueueError("profile_not_configured")
@@ -96,7 +98,7 @@ class TaskCoordinator:
                     select(TaskRunRecord)
                     .where(
                         TaskRunRecord.user_id == user_id,
-                        TaskRunRecord.report_date == local_date,
+                        # One active run per user, including across local midnight.
                         TaskRunRecord.run_type.in_(("manual", "scheduled")),
                         TaskRunRecord.status.in_(("queued", "running")),
                     )
@@ -105,6 +107,18 @@ class TaskCoordinator:
                 )
                 if active is not None:
                     return QueuedRun(active.id, active.status)
+                completed = session.scalar(
+                    select(TaskRunRecord)
+                    .where(
+                        TaskRunRecord.user_id == user_id,
+                        TaskRunRecord.report_date == local_date,
+                        TaskRunRecord.status.in_(("completed", "empty")),
+                    )
+                    .order_by(TaskRunRecord.started_at.desc())
+                    .limit(1)
+                )
+                if completed is not None:
+                    return QueuedRun(completed.id, completed.status)
                 prior_delivery = session.scalar(
                     select(MailDeliveryRecord)
                     .join(BriefRecord, MailDeliveryRecord.brief_id == BriefRecord.id)
@@ -150,7 +164,9 @@ class TaskCoordinator:
         current = now or datetime.now(timezone.utc)
         try:
             with self.session_factory.begin() as session:
-                profile = session.get(UserProfile, user_id)
+                profile = session.scalar(
+                    select(UserProfile).where(UserProfile.id == user_id).with_for_update()
+                )
                 preferences = session.get(SubscriptionPreferences, user_id)
                 if (
                     profile is None
@@ -179,12 +195,22 @@ class TaskCoordinator:
                     select(TaskRunRecord.id)
                     .where(
                         TaskRunRecord.user_id == user_id,
-                        TaskRunRecord.report_date == report_date,
                         TaskRunRecord.status.in_(("queued", "running")),
                     )
                     .limit(1)
                 )
                 if active is not None:
+                    return None
+                completed = session.scalar(
+                    select(TaskRunRecord.id)
+                    .where(
+                        TaskRunRecord.user_id == user_id,
+                        TaskRunRecord.report_date == report_date,
+                        TaskRunRecord.status.in_(("completed", "empty")),
+                    )
+                    .limit(1)
+                )
+                if completed is not None:
                     return None
                 prior_delivery = session.scalar(
                     select(MailDeliveryRecord.id)
@@ -221,7 +247,9 @@ class TaskCoordinator:
             return None
         return QueuedRun(run_id, "queued")
 
-    def recover_interrupted_today(self, now: datetime | None = None) -> list[str]:
+    def recover_interrupted_today(
+        self, now: datetime | None = None, *, include_scheduled: bool = True
+    ) -> list[str]:
         current = now or datetime.now(timezone.utc)
         recovered: list[str] = []
         try:
@@ -232,6 +260,11 @@ class TaskCoordinator:
                     )
                 )
                 for run in runs:
+                    if run.run_type == "scheduled" and not include_scheduled:
+                        run.status = "failed"
+                        run.error_code = "scheduler_disabled"
+                        run.finished_at = utc_now()
+                        continue
                     preferences = session.get(SubscriptionPreferences, run.user_id)
                     if preferences is None:
                         run.status = "failed"
@@ -326,6 +359,8 @@ class TaskCoordinator:
             if delivery_status == "pending":
                 await self.delivery_service.process_delivery(delivery_id)
         except BriefGenerationError as error:
+            if error.code == "run_already_exists":
+                return  # Another claimant owns this execution; never alter its status.
             logger.info("queued run stopped (run_id=%s, error_code=%s)", run_id, error.code)
             self._fail_queued(run_id, error.code)
         except (TaskQueueError, DeliveryError) as error:

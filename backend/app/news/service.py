@@ -6,6 +6,7 @@ import re
 import time
 from collections.abc import Callable
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from urllib.parse import parse_qsl, urlencode, urljoin, urlsplit, urlunsplit
 
@@ -100,7 +101,15 @@ def _parse_published(entry) -> tuple[str | None, str | None, str | None]:
     if not raw:
         return None, None, None
     published_at_utc = None
-    if parsed:
+    try:
+        explicit_time = parsedate_to_datetime(str(raw))
+    except (ValueError, TypeError, OverflowError):
+        try:
+            explicit_time = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+        except ValueError:
+            explicit_time = None
+    # Keep original evidence, but never invent a timezone for an ambiguous date.
+    if parsed and explicit_time is not None and explicit_time.utcoffset() is not None:
         try:
             published_at_utc = datetime.fromtimestamp(
                 calendar.timegm(parsed), timezone.utc
@@ -283,10 +292,25 @@ class NewsService:
                 headers=headers,
             ) as client:
                 for redirect_count in range(MAX_REDIRECTS + 1):
-                    validate_public_http_url(current_url, allowed_hosts, self.resolver)
+                    resolved: list[str] = []
+
+                    def resolve_once(host, port, resolved=resolved):
+                        addresses = self.resolver(host, port)
+                        resolved.extend(addresses)
+                        return addresses
+
+                    host, _port = validate_public_http_url(current_url, allowed_hosts, resolve_once)
+                    # Pin live connections to the already-validated address. Keep the
+                    # original Host and TLS SNI for certificate verification. The
+                    # transport must not resolve the name again (DNS rebinding).
+                    target = current_url
+                    options = {}
+                    if self.transport is None:
+                        target = httpx.URL(current_url).copy_with(host=resolved[0])
+                        options = {"headers": {"Host": host}, "extensions": {"sni_hostname": host}}
                     if time.monotonic() - started > MAX_REQUEST_SECONDS:
                         raise ToolFailure("request_timeout")
-                    with client.stream("GET", current_url) as response:
+                    with client.stream("GET", target, **options) as response:
                         if response.status_code in {301, 302, 303, 307, 308}:
                             location = response.headers.get("location")
                             if not location or redirect_count >= MAX_REDIRECTS:

@@ -13,6 +13,7 @@ defineEmits(['open-article', 'run', 'retry'])
       <p>为你整理的 {{ brief?.item_count || 0 }} 条内容，保留来源，让阅读有据可循。</p>
       <div v-if="brief" class="brief-meta"><span><Clock3 :size="14" aria-hidden="true" />{{ formatTime(brief.generated_at, timezone) }} · {{ timezone }}</span><span>已保存 · {{ deliveryLabel(brief.delivery) }}</span></div>
     </div>
+    <p v-for="warning in brief?.warnings || []" :key="warning" class="feedback neutral" role="status">{{ warning }}</p>
     <div v-if="running" class="inline-loading" role="status"><span class="loading-dot"></span>Agent 正在处理任务，已有内容仍可阅读。耗时取决于新闻来源与模型响应。</div>
     <div v-if="!brief || brief.run_status === 'empty'" class="empty-state">
       <Inbox :size="32" aria-hidden="true" /><h3>{{ brief ? '本期暂无符合偏好的新闻' : '还没有保存的简报' }}</h3><p>{{ brief?.empty_reason || '先保存身份与订阅偏好，再立即运行生成第一期简报。' }}</p>

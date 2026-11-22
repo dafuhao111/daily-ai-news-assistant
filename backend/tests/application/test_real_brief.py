@@ -11,7 +11,7 @@ from app.agent.model import create_chat_model
 from app.application.briefs import BriefGenerationService
 from app.core.config import Settings
 from app.core.task_context import ToolContext
-from app.models.brief import ToolCallRecord
+from app.models.brief import TaskRunRecord, ToolCallRecord
 from app.models.profile import UserProfile
 from app.news.repository import NewsRepository
 from app.news.service import NewsService
@@ -21,7 +21,7 @@ from app.tools import create_default_registry
 
 @pytest.mark.real_llm
 def test_real_model_generates_a_brief_from_mock_rss(
-    tmp_path, session_factory, rss_source, response_handler, public_resolver
+    tmp_path, session_factory, rss_source, response_handler, public_resolver, record_property
 ) -> None:
     if os.getenv("RUN_REAL_LLM_TESTS") != "1":
         pytest.skip("set RUN_REAL_LLM_TESTS=1 to opt in to a real model request")
@@ -81,5 +81,8 @@ def test_real_model_generates_a_brief_from_mock_rss(
 
     assert brief.run_status in {"completed", "empty"}
     with session_factory() as session:
+        usage = session.get(TaskRunRecord, brief.run_id).usage_json
+        record_property("input_tokens", usage["input_tokens"])
+        record_property("output_tokens", usage["output_tokens"])
         calls = session.scalars(select(ToolCallRecord).where(ToolCallRecord.run_id == brief.run_id))
         assert "fetch_rss" in {call.tool_name for call in calls}

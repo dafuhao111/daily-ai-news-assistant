@@ -10,6 +10,40 @@ from app.core.config import Settings
 from app.tools import create_default_registry
 
 
+def test_default_model_clients_are_task_owned_and_never_shared_across_event_loops():
+    from pathlib import Path
+    from tempfile import TemporaryDirectory
+
+    from app.agent import AgentRunner
+    from app.tools import ToolContext
+
+    settings = Settings(
+        _env_file=None,
+        llm_base_url="https://gateway.example/v1",
+        llm_api_key="test-placeholder",
+        llm_model="test-model",
+    )
+    first = create_chat_model(settings)
+    second = create_chat_model(settings)
+    assert first.http_async_client is not second.http_async_client
+    assert first._daily_owned_http_client is first.http_async_client
+    # Resource guard prevents a network call; both distinct event loops still
+    # close their own client through the actual runner lifecycle.
+    from app.agent.runner import AgentLimits
+
+    with TemporaryDirectory() as path:
+        for index, model in enumerate((first, second)):
+            result = asyncio.run(
+                AgentRunner(
+                    model, create_default_registry(), limits=AgentLimits(max_model_input_bytes=1024)
+                ).run(
+                    "Inspect task", ToolContext(run_id=f"loop-{index}", workspace_root=Path(path))
+                )
+            )
+            assert result.termination_reason == "input_limit"
+            assert model.http_async_client.is_closed
+
+
 @pytest.mark.parametrize("protocol", ["chat_completions", "responses"])
 def test_configured_protocol_returns_tool_calls_and_accepts_tool_results(protocol) -> None:
     requests = []

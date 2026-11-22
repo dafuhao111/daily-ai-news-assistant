@@ -34,6 +34,8 @@ class Settings(BaseSettings):
     agent_model_timeout_seconds: float = Field(default=45.0, gt=0, le=300)
     agent_max_tool_rounds: int = Field(default=8, ge=1, le=32)
     agent_max_calls_per_round: int = Field(default=8, ge=1, le=32)
+    agent_max_model_input_bytes: int = Field(default=128_000, ge=1024, le=1_000_000)
+    agent_max_total_input_bytes: int = Field(default=512_000, ge=1024, le=4_000_000)
     agent_task_timeout_seconds: float = Field(default=300.0, gt=0, le=900)
     smtp_host: str | None = None
     smtp_port: int | None = Field(default=None, ge=1, le=65535)

@@ -27,12 +27,14 @@ class DailyScheduler:
         *,
         scheduler: AsyncIOScheduler | None = None,
         now=lambda: datetime.now(timezone.utc),
+        scheduling_enabled: bool = True,
     ) -> None:
         self.session_factory = session_factory
         self.coordinator = coordinator
         self.deliveries = deliveries
         self.scheduler = scheduler or AsyncIOScheduler(timezone=timezone.utc)
         self.now = now
+        self.scheduling_enabled = scheduling_enabled
         self._lock_connection = None
         self._is_leader = False
         self._background_tasks: set[asyncio.Task] = set()
@@ -42,6 +44,15 @@ class DailyScheduler:
         if not self._is_leader:
             logger.info("scheduler lock is held by another API process")
             return
+        self.deliveries.recover_inflight_as_unknown()
+        recovered = self.coordinator.recover_interrupted_today(
+            self.now(), include_scheduled=self.scheduling_enabled
+        )
+        recovered_set = set(recovered)
+        for run_id in recovered:
+            self._spawn(self.coordinator.execute_queued(run_id))
+        if not self.scheduling_enabled:
+            return  # Recover manual work without enabling daily schedules or email retries.
         if not self.scheduler.running:
             self.scheduler.start()
         if not self.scheduler.get_job("mail-delivery-retries"):
@@ -62,11 +73,6 @@ class DailyScheduler:
                 coalesce=True,
                 max_instances=1,
             )
-        self.deliveries.recover_inflight_as_unknown()
-        recovered = self.coordinator.recover_interrupted_today(self.now())
-        recovered_set = set(recovered)
-        for run_id in recovered:
-            self._spawn(self.coordinator.execute_queued(run_id))
         await self.refresh()
         for user_id in self._enabled_user_ids():
             queued = self.coordinator.enqueue_scheduled(user_id, self.now())
@@ -74,7 +80,7 @@ class DailyScheduler:
                 self._spawn(self.coordinator.execute_queued(queued.run_id))
 
     async def refresh(self) -> None:
-        if not self._is_leader:
+        if not self._is_leader or not self.scheduling_enabled:
             return
         if not self.deliveries.mailer.is_configured:
             for job in self.scheduler.get_jobs():

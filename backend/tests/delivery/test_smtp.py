@@ -137,3 +137,24 @@ def test_temporary_single_recipient_refusal_is_retryable(monkeypatch) -> None:
 
     assert error.value.disposition == "retry"
     assert error.value.code == "smtp_temporary_rejection"
+
+
+def test_connection_timeout_is_retryable_but_data_timeout_is_unknown(monkeypatch):
+    def connect_timeout(*_args, **_kwargs):
+        raise TimeoutError("test-only timeout")
+
+    monkeypatch.setattr("app.delivery.smtp.smtplib.SMTP", connect_timeout)
+    with pytest.raises(SMTPDeliveryFailure) as connected:
+        SMTPMailer(smtp_settings()).send_test("reader@example.org", "timeout-before-send")
+    assert connected.value.disposition == "retry"
+    assert connected.value.code == "smtp_connection_failed"
+
+    class DataTimeout(FakeSMTP):
+        def send_message(self, *_args, **_kwargs):
+            raise TimeoutError("test-only DATA timeout")
+
+    monkeypatch.setattr("app.delivery.smtp.smtplib.SMTP", DataTimeout)
+    with pytest.raises(SMTPDeliveryFailure) as submitted:
+        SMTPMailer(smtp_settings()).send_test("reader@example.org", "timeout-after-data")
+    assert submitted.value.disposition == "unknown"
+    assert submitted.value.code == "smtp_result_unknown"

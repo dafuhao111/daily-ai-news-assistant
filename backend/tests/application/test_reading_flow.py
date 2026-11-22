@@ -9,7 +9,7 @@ from app.agent import AgentRunner
 from app.application.tasks import TaskCoordinator
 from app.core.config import Settings
 from app.core.task_context import ToolContext
-from app.models.brief import ToolCallRecord
+from app.models.brief import TaskRunRecord, ToolCallRecord
 from app.news.service import NewsService
 from app.tools import create_default_registry
 
@@ -125,3 +125,6 @@ def test_saved_preferences_to_real_agent_loop_to_history(
         assert [(call.call_id, call.tool_name) for call in calls] == [
             ("llm-selected-rss", "fetch_rss")
         ]
+        decisions = session.get(TaskRunRecord, accepted["run_id"]).usage_json["model_decisions"]
+        assert decisions[0]["requested_tools"] == ["fetch_rss"]
+        assert decisions[1]["status"] == "final_answer"

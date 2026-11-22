@@ -57,6 +57,7 @@ class BriefContent(BaseModel):
     item_count: int = Field(ge=0, le=5)
     items: list[BriefItem] = Field(max_length=5)
     empty_reason: str | None = None
+    warnings: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def item_count_matches_items(self) -> "BriefContent":
@@ -76,3 +77,4 @@ class BriefRead(BaseModel):
     item_count: int
     items: list[BriefItem]
     empty_reason: str | None
+    warnings: list[str] = Field(default_factory=list)

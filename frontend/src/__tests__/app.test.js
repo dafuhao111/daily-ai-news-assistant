@@ -128,3 +128,11 @@ it('页面跨中国时区午夜后更新日期，报告日期继续来自后端'
   expect(wrapper.get('.page-kicker').text()).toContain('2026年11月23日')
   expect(wrapper.get('.edition').text()).toBe('2026.11.22')
 })
+it('后端复用当天任务时不伪装为新任务或再次投递', async () => {
+  const { fetcher, reply } = await start()
+  vi.stubGlobal('fetch', vi.fn((url, options) => url === '/api/v1/runs'
+    ? Promise.resolve(reply({ run_id: 'run-7', status: 'completed' })) : fetcher(url, options)))
+  await wrapper.get('.page-header .primary').trigger('click'); await flushPromises()
+  expect(wrapper.text()).toContain('未重复生成或发送')
+  expect(fetcher.mock.calls.some(([url]) => url.includes('/delivery/retry'))).toBe(false)
+})

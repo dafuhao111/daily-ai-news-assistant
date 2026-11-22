@@ -165,6 +165,7 @@ class MailDeliveryService:
                         MailDeliveryRecord.brief_id == brief_id,
                         TaskRunRecord.user_id == user_id,
                     )
+                    .with_for_update()
                 )
                 if record is None:
                     raise DeliveryError("delivery_not_found")
@@ -191,7 +192,11 @@ class MailDeliveryService:
         now = utc_now()
         try:
             with self.session_factory.begin() as session:
-                delivery = session.get(MailDeliveryRecord, delivery_id)
+                delivery = session.scalar(
+                    select(MailDeliveryRecord)
+                    .where(MailDeliveryRecord.id == delivery_id)
+                    .with_for_update()
+                )
                 if delivery is None or delivery.status != "pending":
                     return None
                 brief_record = session.get(BriefRecord, delivery.brief_id)
@@ -242,6 +247,7 @@ class MailDeliveryService:
                     item_count=content.item_count,
                     items=content.items,
                     empty_reason=content.empty_reason,
+                    warnings=content.warnings,
                 )
                 return delivery.recipient_snapshot, delivery.idempotency_key, brief
         except SQLAlchemyError as error:

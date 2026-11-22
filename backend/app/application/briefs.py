@@ -6,7 +6,7 @@ from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from pydantic import ValidationError
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -182,6 +182,17 @@ def _usage_snapshot(result: AgentRunResult) -> dict[str, Any]:
         "input_tokens": result.input_tokens,
         "output_tokens": result.output_tokens,
         "termination_reason": result.termination_reason,
+        "model_decisions": [
+            {
+                "turn": event.turn,
+                "kind": event.kind,
+                "status": event.status,
+                "requested_tools": event.requested_tools,
+                "duration_ms": event.duration_ms,
+            }
+            for event in result.events
+            if event.kind in {"model_decision", "termination"}
+        ][:128],
     }
 
 
@@ -255,6 +266,13 @@ class BriefGenerationService:
                 item_count=len(items),
                 items=items,
                 empty_reason=draft.empty_reason,
+                warnings=["部分新闻来源读取失败，本期覆盖范围有限。"]
+                if any(
+                    context.news_source_outcomes.get(source.source_id) not in (None, "succeeded")
+                    for source in context.news_sources
+                    if source.enabled
+                )
+                else [],
             )
             return self._save_success(
                 context.run_id,
@@ -307,10 +325,19 @@ class BriefGenerationService:
                         or existing.preferences_snapshot != preferences_snapshot
                     ):
                         raise BriefGenerationError("run_already_exists")
-                    existing.status = "running"
-                    existing.attempt_count += 1
-                    existing.error_code = None
-                    existing.finished_at = None
+                    claimed = session.execute(
+                        update(TaskRunRecord)
+                        .where(TaskRunRecord.id == run_id, TaskRunRecord.status == "queued")
+                        .values(
+                            status="running",
+                            attempt_count=TaskRunRecord.attempt_count + 1,
+                            error_code=None,
+                            finished_at=None,
+                        )
+                        .execution_options(synchronize_session=False)
+                    )
+                    if claimed.rowcount != 1:
+                        raise BriefGenerationError("run_already_exists")
                 else:
                     session.add(
                         TaskRunRecord(
@@ -434,4 +461,5 @@ class BriefGenerationService:
             item_count=content.item_count,
             items=content.items,
             empty_reason=content.empty_reason,
+            warnings=content.warnings,
         )

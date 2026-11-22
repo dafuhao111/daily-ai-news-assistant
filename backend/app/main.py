@@ -50,11 +50,13 @@ def create_app(
     )
     mail_test_service = MailTestService(session_factory, smtp_mailer) if session_factory else None
     daily_scheduler = (
-        DailyScheduler(session_factory, task_coordinator, delivery_service)
-        if session_factory
-        and task_coordinator
-        and delivery_service
-        and app_settings.scheduler_enabled
+        DailyScheduler(
+            session_factory,
+            task_coordinator,
+            delivery_service,
+            scheduling_enabled=app_settings.scheduler_enabled,
+        )
+        if session_factory and task_coordinator and delivery_service
         else None
     )
 

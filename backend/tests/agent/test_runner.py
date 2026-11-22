@@ -85,6 +85,42 @@ def test_model_can_repeat_a_tool_and_decide_when_to_stop(make_runner, agent_cont
     assert [message.tool_call_id for message in tool_results] == ["list-inputs", "list-history"]
 
 
+def test_model_input_budget_stops_before_submitting_oversized_request(make_runner, agent_context):
+    runner, model = make_runner(
+        [AIMessage(content="unused")], limits=AgentLimits(max_model_input_bytes=1024)
+    )
+    result = run_agent(runner, "Read today's news", agent_context)
+    assert result.status == "limited" and result.termination_reason == "input_limit"
+    assert model.observed_messages == []
+    assert result.final_answer is None
+
+
+def test_model_input_budget_counts_repeated_history_submissions(make_runner, agent_context):
+    from langchain_core.messages import HumanMessage, SystemMessage
+
+    from app.agent.runner import _task_system_prompt
+    from app.tools import create_default_registry
+
+    messages = [
+        SystemMessage(content=_task_system_prompt(agent_context)),
+        HumanMessage(content="Inspect materials"),
+    ]
+    size = len(
+        json.dumps(
+            [message.model_dump(mode="json") for message in messages], ensure_ascii=False
+        ).encode()
+    )
+    size += len(json.dumps(create_default_registry().model_schemas(), ensure_ascii=False).encode())
+    runner, model = make_runner(
+        [tool_call("list_dir", {"path": "inputs"}, "first-call"), AIMessage(content="unused")],
+        limits=AgentLimits(max_total_input_bytes=size * 2),
+    )
+    result = run_agent(runner, "Inspect materials", agent_context)
+    assert result.status == "limited" and result.termination_reason == "input_limit"
+    assert len(model.observed_messages) == 1
+    assert execution_names(result) == ["list_dir"]
+
+
 def test_news_source_catalog_passes_ids_without_feed_urls(make_runner, agent_context) -> None:
     from app.news.schemas import RSSSource
     from app.tools import ToolContext

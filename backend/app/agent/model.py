@@ -34,7 +34,13 @@ def create_chat_model(
         or endpoint.fragment
     ):
         raise ModelNotConfiguredError("llm_not_configured")
-    return ChatOpenAI(
+    owned_client = http_async_client is None
+    client = http_async_client or httpx.AsyncClient(
+        timeout=settings.agent_model_timeout_seconds,
+        trust_env=False,
+        limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+    )
+    model = ChatOpenAI(
         model=settings.llm_model,
         api_key=api_key,
         base_url=settings.llm_base_url.strip(),
@@ -43,5 +49,9 @@ def create_chat_model(
         max_tokens=settings.llm_max_output_tokens,
         use_responses_api=settings.llm_api_protocol == "responses",
         store=False,
-        http_async_client=http_async_client,
+        http_async_client=client,
     )
+    # LangChain caches its default async client across model instances. A task
+    # must own its client so a previous asyncio.run() cannot poison another loop.
+    object.__setattr__(model, "_daily_owned_http_client", client if owned_client else None)
+    return model

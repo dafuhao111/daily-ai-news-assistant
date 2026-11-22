@@ -66,6 +66,11 @@ it('真实简报保留来源、缺失日期不编造，投递重试带简报 ID'
   await wrapper.findAll('button').find((button) => button.text().includes('查看原文')).trigger('click')
   expect(wrapper.emitted('open-article')[0][0].source_name).toBe('测试来源')
 })
+it('来源部分失败的提示来自后端已保存简报', () => {
+  wrapper = mount(BriefView, { props: { brief: { ...structuredClone(brief), warnings: ['部分新闻来源读取失败，本期覆盖范围有限。'] } } })
+  expect(wrapper.text()).toContain('本期覆盖范围有限')
+  expect(wrapper.findAll('.article-row')).toHaveLength(1)
+})
 it('按日期读历史，生成失败与无新闻区分，支持空查询', async () => {
   const { state, fetcher } = mockApi({ history: [
     { ...run, status: 'failed', error_code: 'model_timeout', brief_id: null },

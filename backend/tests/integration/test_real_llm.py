@@ -10,7 +10,7 @@ from app.tools import ToolContext, create_default_registry
 
 
 @pytest.mark.real_llm
-def test_openai_compatible_model_completes_a_real_tool_call(tmp_path) -> None:
+def test_openai_compatible_model_completes_a_real_tool_call(tmp_path, record_property) -> None:
     if os.getenv("RUN_REAL_LLM_TESTS") != "1":
         pytest.skip("set RUN_REAL_LLM_TESTS=1 to opt in to a real model request")
 
@@ -45,6 +45,8 @@ def test_openai_compatible_model_completes_a_real_tool_call(tmp_path) -> None:
     )
 
     assert result.status == "completed", result.termination_reason
+    record_property("input_tokens", result.input_tokens)
+    record_property("output_tokens", result.output_tokens)
     assert any(
         event.kind == "tool_execution"
         and event.tool_name == "list_dir"

@@ -27,6 +27,15 @@ def inspect_run(session_factory, run_id: str) -> dict:
         brief_id = session.scalar(select(BriefRecord.id).where(BriefRecord.run_id == run_id))
         return {
             "run_id": run_id,
+            "model_decisions": [
+                {
+                    key: event[key]
+                    for key in ("turn", "kind", "status", "requested_tools", "duration_ms")
+                    if key in event
+                }
+                for event in (run.usage_json or {}).get("model_decisions", [])[:128]
+                if isinstance(event, dict)
+            ],
             "model_tool_calls": [
                 {
                     "attempt": call.attempt,

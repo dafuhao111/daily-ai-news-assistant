@@ -18,6 +18,7 @@ from app.models.news import NewsItemRecord
 from app.models.preferences import SubscriptionPreferences
 from app.models.profile import UserProfile
 from app.news.service import NewsService
+from app.scheduler import DailyScheduler
 from app.tools import create_default_registry
 
 
@@ -445,4 +446,147 @@ def test_subscription_change_during_generation_skips_delivery_to_old_recipient(
     assert delivery.status == "skipped"
     assert delivery.last_error_code == "subscription_disabled"
     assert delivery.recipient_snapshot == "new-reader@example.org"
+    assert mailer.sent == []
+
+
+def test_successful_manual_run_reuses_daily_result_and_blocks_scheduled_duplicate(
+    tmp_path,
+    session_factory,
+    rss_source,
+    response_handler,
+    public_resolver,
+):
+    configure_user(session_factory)
+    coordinator, mailer = build_coordinator(
+        session_factory,
+        tmp_path,
+        rss_source,
+        response_handler,
+        public_resolver,
+        [fetch_rss_call(), final_brief()],
+    )
+    first = coordinator.enqueue_manual(idempotency_token="first-click")
+    asyncio.run(coordinator.execute_queued(first.run_id))
+    again = coordinator.enqueue_manual(idempotency_token="different-click")
+    assert again.run_id == first.run_id and again.status == "completed"
+    # Use a time in the saved local report date after the daily wall-clock time.
+    from zoneinfo import ZoneInfo
+
+    with session_factory() as session:
+        day = session.get(TaskRunRecord, first.run_id).report_date
+    due = datetime.combine(day, time(23, 59), tzinfo=ZoneInfo("Asia/Shanghai"))
+    assert coordinator.enqueue_scheduled(1, due) is None
+    assert len(mailer.sent) == 1
+
+
+def test_live_scheduler_timer_fires_and_restart_does_not_resend(
+    tmp_path,
+    session_factory,
+    rss_source,
+    response_handler,
+    public_resolver,
+):
+    import threading
+    from datetime import timedelta
+    from zoneinfo import ZoneInfo
+
+    configure_user(session_factory)
+    coordinator, mailer = build_coordinator(
+        session_factory,
+        tmp_path,
+        rss_source,
+        response_handler,
+        public_resolver,
+        [fetch_rss_call(), final_brief()],
+    )
+    sent = threading.Event()
+    original_send = mailer.send_brief
+
+    def signal_send(*args):
+        result = original_send(*args)
+        sent.set()
+        return result
+
+    mailer.send_brief = signal_send
+    due = datetime.now(ZoneInfo("Asia/Shanghai")) + timedelta(seconds=2)
+    with session_factory.begin() as session:
+        session.get(SubscriptionPreferences, 1).run_time = due.time().replace(microsecond=0)
+
+    async def check():
+        scheduler = DailyScheduler(session_factory, coordinator, coordinator.delivery_service)
+        await scheduler.start()
+        try:
+            assert await asyncio.to_thread(sent.wait, 8), "real APScheduler timer did not fire"
+            # Wait for the callback's status transaction, not just SMTP invocation.
+            for _ in range(50):
+                with session_factory() as session:
+                    delivery = session.scalar(select(MailDeliveryRecord))
+                    submitted = delivery is not None and delivery.status == "submitted"
+                if submitted:
+                    break
+                await asyncio.sleep(0.02)
+            assert submitted
+        finally:
+            await scheduler.shutdown()
+        restarted = DailyScheduler(session_factory, coordinator, coordinator.delivery_service)
+        await restarted.start()
+        try:
+            await asyncio.sleep(0.05)
+            assert len(mailer.sent) == 1
+        finally:
+            await restarted.shutdown()
+
+    asyncio.run(check())
+
+
+def test_restart_recovers_manual_work_when_daily_scheduling_is_disabled(
+    tmp_path,
+    session_factory,
+    rss_source,
+    response_handler,
+    public_resolver,
+):
+    configure_user(session_factory, enabled=False)
+    coordinator, mailer = build_coordinator(
+        session_factory,
+        tmp_path,
+        rss_source,
+        response_handler,
+        public_resolver,
+        [fetch_rss_call(), final_brief()],
+    )
+    queued = coordinator.enqueue_manual(idempotency_token="before-restart")
+    with session_factory.begin() as session:
+        manual = session.get(TaskRunRecord, queued.run_id)
+        session.add(
+            TaskRunRecord(
+                id="scheduled-before-disable",
+                user_id=1,
+                run_type="scheduled",
+                idempotency_key="daily-disabled-recovery",
+                report_date=manual.report_date,
+                status="running",
+                preferences_snapshot=manual.preferences_snapshot,
+            )
+        )
+
+    async def check():
+        scheduler = DailyScheduler(
+            session_factory, coordinator, coordinator.delivery_service, scheduling_enabled=False
+        )
+        await scheduler.start()
+        try:
+            tasks = list(scheduler._background_tasks)
+            assert len(tasks) == 1
+            await asyncio.gather(*tasks)
+            assert not scheduler.scheduler.running
+            with session_factory() as session:
+                assert session.get(TaskRunRecord, queued.run_id).status == "completed"
+                assert session.scalar(select(MailDeliveryRecord)).status == "skipped"
+                disabled = session.get(TaskRunRecord, "scheduled-before-disable")
+                assert disabled.status == "failed" and disabled.error_code == "scheduler_disabled"
+        finally:
+            await scheduler.shutdown()
+
+    asyncio.run(check())
     assert mailer.sent == []
