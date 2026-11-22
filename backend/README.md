@@ -29,6 +29,8 @@ Available endpoints in this phase:
 
 - `GET` / `PUT` `/api/v1/profile`
 - `GET` / `PUT` `/api/v1/preferences`
+- `GET` `/api/v1/status`, `/api/v1/history?report_date=YYYY-MM-DD&offset=0&limit=30`
+- `GET` `/api/v1/briefs/latest` and `/api/v1/briefs/{brief_id}`
 - `POST` `/api/v1/runs` and `GET` `/api/v1/runs/{run_id}`
 - `GET` `/api/v1/mail/status`, `POST` `/api/v1/mail/test`, and `POST` `/api/v1/mail/test/confirm`
 - `POST` `/api/v1/briefs/{brief_id}/delivery/retry`
@@ -48,7 +50,7 @@ Email uses the standard-library SMTP client and an existing mailbox provider. No
 
 The `.env.example` contains only commented placeholders. A test send is never attempted automatically. The task run, redacted tool-call diagnostics, brief, selected-news markers, and mail-delivery row commit atomically. The delivery row snapshots the saved recipient after checking the current subscription and mail confirmation; the SMTP sender checks those values again before sending. SMTP acceptance is recorded as `submitted`, not delivered. The generated RFC Message-ID is not treated as a provider receipt. Explicit temporary rejections retry at most three times by default with exponential backoff. Permanent failures can be manually retried up to three times using the saved brief. An uncertain SMTP result is `unknown`, is not retried automatically, and the retry endpoint rejects it to avoid duplicate email. A process restart converts an in-flight `sending` attempt to `unknown`.
 
-To trigger a run in development, first confirm the saved email test and enable preferences, then send the local API request:
+To generate without sending, save preferences with `enabled=false` and keep `SCHEDULER_ENABLED=false`. Email confirmation and enabled preferences are required only for delivery. Trigger a real Agent run from the frontend or send the local API request:
 
 ```powershell
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/runs" `
@@ -56,7 +58,17 @@ Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000/api/v1/runs" `
   -ContentType "application/json" -Body "{}"
 ```
 
-The response contains a `run_id`; poll `/api/v1/runs/{run_id}` for status. Tests use fake SMTP and mocked RSS/model services and never send real email. No real SMTP account is configured or verified by this repository.
+The response contains a `run_id`; poll `/api/v1/runs/{run_id}` for status. Tests use fake SMTP and mocked RSS/model services and never send real email. Credentials are not bundled. This local installation separately verified one NetEase 163 test email with the user's receipt confirmation; Stage G did not send another email.
+
+Build with `npm run build` in `frontend/`, then start the backend to serve the three-page app at `http://127.0.0.1:8000/`. Only `frontend/dist` is mounted. An optional `FRONTEND_DIST_DIR` can select another built frontend directory. Without a build, the API remains available and `/` returns 404. Vite development/preview proxies `/api` to port 8000.
+
+Read user-owned saved briefs and paginated task history through the new read APIs. They return explicit user DTOs, not ORM snapshots or tool records. Local developer diagnostics are separate:
+
+```powershell
+uv run --locked python -m app.diagnostics RUN_ID
+```
+
+This prints paired model tool requests and execution results, final status, brief ID, and numeric token usage from persisted records. It omits arguments, prompts, recipients and tool payloads. See `docs/阶段G联调验收.md` for the real-model/browser validation and remaining limitations.
 
 ## Task tools
 
@@ -88,7 +100,7 @@ The `rss_source` and `news_item` tables persist configured sources, fetched mate
 
 The model returns only article IDs, Chinese summaries, relevance reasons, and an empty-result reason. The service rejects malformed output, duplicate or undisclosed IDs, missing source evidence, disallowed source hosts, and excluded-keyword matches. It fills titles, source names, URLs, and publication evidence from the task's actual RSS candidates. Saved brief JSON separates the generated summary from a bounded source excerpt. The brief, task status, redacted tool-call diagnostics, usage data, and selected-news inclusion markers commit in one transaction. Empty briefs are saved with status `empty` only after the task has successful RSS evidence or recovered candidates; otherwise the task is recorded as failed. Tool-call diagnostics store argument summaries and short results, never raw tool arguments or prompts.
 
-The generator is an application service for the scheduler and API integration stages; this stage does not expose a user-facing run endpoint. The Mock LLM tests cover distinct tool-choice traces for distinct preference snapshots. An optional real-model brief path uses a mocked RSS transport and calls only the configured LLM endpoint:
+The generator is used by the scheduler and the real `POST /api/v1/runs` endpoint. The Mock LLM tests cover distinct tool-choice traces for distinct preference snapshots. An optional real-model brief path uses a mocked RSS transport and calls only the configured LLM endpoint:
 
 ```powershell
 $env:RUN_REAL_LLM_TESTS = "1"
