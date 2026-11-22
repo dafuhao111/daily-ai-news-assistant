@@ -4,12 +4,12 @@ Local single-user API foundation for the Daily AI News Assistant.
 
 ## Setup
 
-Use Python 3.10 or newer. From this directory, install the pinned dependencies from `uv.lock`:
+Use Python 3.12 (minimum 3.11). Python 3.10 cannot use the patched DNS dependency. The committed `.python-version` selects 3.12. From this directory, install pinned dependencies from `uv.lock`:
 
 ```powershell
 python -m pip install uv==0.13.9
 uv sync --locked --extra dev
-Copy-Item .env.example .env
+# First install only: copy .env.example to .env if .env does not exist.
 ```
 
 Before starting, create the `daily_ai_news` database with `utf8mb4` and a dedicated least-privilege MySQL account. Replace the placeholder `DATABASE_URL` in the untracked `.env`; do not use MySQL root or commit credentials.
@@ -19,8 +19,8 @@ The locked `pymysql[rsa]` dependency includes the cryptography support required 
 ## Migrations and run
 
 ```powershell
-alembic upgrade head
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv run --locked alembic upgrade head
+uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
 
 The API rejects non-loopback Host headers and state-changing requests without a local Origin and JSON content type. It does not implement authentication or expose mail/model secrets.
@@ -76,7 +76,7 @@ This prints paired model tool requests and execution results, final status, brie
 
 File access is limited to `inputs/` and `history/` for reads/searches, and `drafts/` for writes. The task runner must provide a dedicated workspace with a current-user-only Windows ACL. Hidden items, links/reparse points, hard-linked files, denied extensions, oversized files, and paths outside the workspace are rejected or skipped. Handle-level protection against same-user path races remains to be verified on Windows. Tool responses are returned as stable JSON error codes and capped at 12 KiB when serialized for a model.
 
-The `bash` tool is registered and validates a single `python -m json.tool <workspace-file>` command shape, but returns `sandbox_unavailable` without starting a process. Windows low-privilege isolation and process-tree resource controls have not been verified, so command execution remains disabled by design.
+The `bash` tool runs only `python -m json.tool <allowed-json-material>`. It reads an inputs/history JSON snapshot (64 KiB, depth 32), then launches the trusted interpreter with fixed `-I -S -m json.tool` argv, snapshot stdin, shell=False, minimal environment, two-second subprocess timeout and capped output. No model filename reaches the child. Real execution, cwd import hijacking, environment stripping, timeout, output limits and unsafe-command tests pass. It is a narrow validator, not a general Windows shell sandbox; arbitrary commands remain denied.
 
 ## Agent loop
 
@@ -90,7 +90,7 @@ For this installation, the [Happy Code help center](https://cn.happycodeapi.com/
 
 The RSS tools use a local JSON source catalog. The user confirmed OpenAI, Google DeepMind, and Microsoft Research as initial sources on 2026-11-21. Copy `config/rss_sources.example.json` to `config/rss_sources.json`; the live file is ignored by Git. The three public feeds were reachable and parsable during setup, which does not guarantee every linked article is readable or relevant. Each entry contains `source_id`, `name`, `feed_url`, `allowed_hosts`, `category`, and `enabled`. `allowed_hosts` must include the configured feed host and any approved article hosts. Only enabled source IDs, names, and categories are shown to the model; feed URLs are never included in its prompt.
 
-`fetch_rss` reads only those configured feeds, with a 2 MiB response cap, bounded redirects, timeouts, DNS/IP checks, and exact allowed-host checks. `search_news` searches only candidates loaded for the current task and does not use a third-party search service. `fetch_article` accepts only an article ID from that task and uses the source's allowed hosts. RSS and public article access normally need no account or paid search API; a feed that requires credentials is not supported by this configuration. DNS is checked before each request and redirect, but a same-host DNS rebinding race remains a Windows/network-layer limitation.
+`fetch_rss` reads only those configured feeds, with a 2 MiB response cap, bounded redirects, timeouts, DNS/IP checks, and exact allowed-host checks. `search_news` searches only candidates loaded for the current task and does not use a third-party search service. `fetch_article` accepts only an article ID from that task and uses the source's allowed hosts. RSS and public article access normally need no account or paid search API; a feed that requires credentials is not supported by this configuration. DNS is checked before each request and redirect. Live connections are pinned to a validated public IP, with original Host/TLS SNI and certificate verification, preventing a second DNS lookup from switching the connection to a private address.
 
 The `rss_source` and `news_item` tables persist configured sources, fetched material, article text, canonical URL hashes, and an inclusion marker. Article text is stored with a 24 KiB cap; `fetch_article` returns 2,500-character chunks on repeated model calls and reports when the source text was truncated. The repository returns previously fetched items again after a failed task until a later brief transaction marks them included. When the task runner passes a `NewsRepository` into `create_tool_context`, exact URL duplicates are suppressed across tasks. `mark_task_success` is designed to update inclusion markers and source cursors inside the same transaction that saves a successful brief; it must not be called for failed or partial runs.
 
@@ -135,3 +135,9 @@ uv run pytest
 ```
 
 Tests use an isolated SQLite database for repeatable API and migration coverage. A MySQL integration run requires a separately configured disposable test schema and is not implied by the SQLite results.
+
+## Final acceptance
+
+See [acceptance report](../docs/完整验收报告.md) and [deployment/demo](../docs/部署与演示.md). Manual work recovers after restart even with daily scheduling disabled; interrupted scheduled work is marked scheduler_disabled in that mode. Completed/empty daily slots are reused. Explicit one-shot live validation is available through `uv run --locked python -m app.acceptance --live`; add `--send-verified-email` only for an authorized single send. This is a developer acceptance command, not an automatic daily job.
+
+Each model task owns and closes its async HTTP client. Model input bytes are bounded per request and cumulatively (128,000 / 512,000 by default). These limits do not implement a cumulative project token invoice cap. RSS failures are saved as a coverage warning. Ambiguous publication dates retain their original value without inventing UTC.
