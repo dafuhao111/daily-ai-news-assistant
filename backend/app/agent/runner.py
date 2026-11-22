@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.agent.model import create_chat_model
 from app.agent.schemas import AgentRunResult, AgentTask, AgentTraceEvent
+from app.application.budget import BudgetError
 from app.core.config import Settings, get_settings
 from app.tools import ToolContext, ToolRegistry, create_default_registry
 from app.tools.registry import ToolResult
@@ -255,6 +256,18 @@ class AgentRunner:
                     "termination_reason": "model_timeout",
                 }
             except Exception as error:  # noqa: BLE001 - normalize model adapter failures
+                current = error
+                seen = set()
+                while current is not None and id(current) not in seen:
+                    seen.add(id(current))
+                    if isinstance(current, BudgetError):
+                        emit(turn=next_turn, kind="termination", status=current.code)
+                        return {
+                            "turn": next_turn,
+                            "status": "limited",
+                            "termination_reason": current.code,
+                        }
+                    current = current.__cause__ or current.__context__
                 logger.warning(
                     "agent model request failed (run_id=%s, error_type=%s)",
                     context.run_id,

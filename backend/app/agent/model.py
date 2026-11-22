@@ -3,6 +3,7 @@ from urllib.parse import urlsplit
 import httpx
 from langchain_openai import ChatOpenAI
 
+from app.agent.budget_client import BudgetHTTPClient
 from app.core.config import Settings
 
 
@@ -11,7 +12,7 @@ class ModelNotConfiguredError(RuntimeError):
 
 
 def create_chat_model(
-    settings: Settings, *, http_async_client: httpx.AsyncClient | None = None
+    settings: Settings, *, http_async_client: httpx.AsyncClient | None = None, budget_service=None
 ) -> ChatOpenAI:
     if not settings.llm_base_url or not settings.llm_model or not settings.llm_api_key:
         raise ModelNotConfiguredError("llm_not_configured")
@@ -35,10 +36,13 @@ def create_chat_model(
     ):
         raise ModelNotConfiguredError("llm_not_configured")
     owned_client = http_async_client is None
-    client = http_async_client or httpx.AsyncClient(
+    source = http_async_client or httpx.AsyncClient(
         timeout=settings.agent_model_timeout_seconds,
         trust_env=False,
         limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+    )
+    client = BudgetHTTPClient(
+        source, settings, budget_service=budget_service, owns_source=owned_client
     )
     model = ChatOpenAI(
         model=settings.llm_model,
@@ -53,5 +57,5 @@ def create_chat_model(
     )
     # LangChain caches its default async client across model instances. A task
     # must own its client so a previous asyncio.run() cannot poison another loop.
-    object.__setattr__(model, "_daily_owned_http_client", client if owned_client else None)
+    object.__setattr__(model, "_daily_owned_http_client", client)
     return model

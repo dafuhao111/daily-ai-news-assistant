@@ -10,7 +10,7 @@ import { useAssistant } from './composables/useAssistant'
 import { deliveryLabel, errorMessage, formatTime, runLabel } from './api'
 
 const assistant = useAssistant()
-const { preferences, notice, currentBrief, running, mailBusy, mailStatus, status, now, loading, ready, error, actionError, profileConfigured, preferencesConfigured, saving } = assistant
+const { preferences, notice, currentBrief, budget, running, mailBusy, mailStatus, status, now, loading, ready, error, actionError, profileConfigured, preferencesConfigured, saving } = assistant
 const pages = { today: '每日简报', history: '历史简报', settings: '身份与订阅' }
 const getPage = () => Object.hasOwn(pages, location.hash.slice(1)) ? location.hash.slice(1) : 'today'
 const page = ref(getPage())
@@ -50,6 +50,7 @@ function skipToContent() { document.getElementById('main-content')?.focus() }
               <section class="rail-section"><div class="rail-heading"><h2>我的关注</h2><a class="icon-button" href="#settings" aria-label="编辑关注偏好"><SlidersHorizontal :size="17" aria-hidden="true" /></a></div><div class="topic-tags"><span v-for="topic in preferences.topics" :key="topic">{{ topic }}</span></div><p v-if="!preferences.topics.length">尚未保存关注话题</p><p class="keyword-summary">关键词<br /><strong>{{ preferences.keywords || '尚未设置' }}</strong></p><a class="text-button" href="#settings">调整订阅偏好<ArrowRight :size="15" aria-hidden="true" /></a></section>
               <section class="rail-section delivery-section"><Mail :size="19" aria-hidden="true" /><h2>简报的下一站</h2><p class="email-display">{{ preferences.email || '尚未保存收件邮箱' }}</p><span :class="['status-pill', { danger: currentBrief?.delivery?.status === 'failed' }]">{{ deliveryLabel(currentBrief?.delivery) }}</span><p>{{ mailStatus === 'succeeded' ? '收件邮箱已验证' : '收件邮箱尚未验证' }}</p><a class="text-button" href="#settings">查看邮件配置<ArrowRight :size="15" aria-hidden="true" /></a><p class="tiny-note">“已提交发送”表示 SMTP 接受请求，不代表邮件已送达。</p></section>
               <div class="source-note"><Rss :size="17" aria-hidden="true" /><p>来源方式：RSS<br /><span>来源由本地配置文件管理，简报保留原文链接。</span></p></div>
+              <section class="rail-section" aria-label="项目 Token 预算"><h2>项目 Token 预算</h2><template v-if="budget?.initialized"><p>总额度 {{ budget.limit_tokens.toLocaleString('zh-CN') }}<br />已确认 {{ budget.confirmed_tokens.toLocaleString('zh-CN') }}<br />待核对预留 {{ budget.uncertain_tokens.toLocaleString('zh-CN') }}<br />请求中预留 {{ budget.reserved_tokens.toLocaleString('zh-CN') }}<br />可用 {{ budget.available_tokens.toLocaleString('zh-CN') }}</p><p v-if="budget.blocked" class="field-error" role="status">预算已用尽或需核对，模型请求将停止。</p><p class="tiny-note">包含输入和输出。超时预留待核对，不按零消耗处理。</p></template><p v-else>预算尚未初始化，模型请求将停止。请先完成本地预算配置。</p></section>
             </aside>
           </div>
           <SettingsView v-else-if="page === 'settings'" :preferences="preferences" :save="assistant.savePreferences" :save-identity="assistant.saveIdentity" :mail-status="mailStatus" :mail-busy="mailBusy" :running="running" :smtp-configured="status.smtp_configured" :scheduler-running="status.scheduler_running" @test-email="assistant.testEmail" @confirm-email="assistant.confirmEmail" />

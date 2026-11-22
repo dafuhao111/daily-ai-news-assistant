@@ -29,6 +29,7 @@ export function mockApi(overrides = {}) {
       if (method === 'PUT') state.preferences = JSON.parse(options.body)
       return state.preferences ? reply(state.preferences) : reply({ detail: 'preferences_not_configured' }, 404)
     }
+    if (path === '/budget') return reply(state.budget || { initialized: true, limit_tokens: 1000000, confirmed_tokens: 118771, uncertain_tokens: 200000, reserved_tokens: 0, available_tokens: 681229, blocked: false })
     if (path === '/status') return reply(state.status)
     if (path === '/briefs/latest') return reply(state.brief)
     if (path === '/history') {

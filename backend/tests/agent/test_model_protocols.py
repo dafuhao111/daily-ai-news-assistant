@@ -45,7 +45,13 @@ def test_default_model_clients_are_task_owned_and_never_shared_across_event_loop
 
 
 @pytest.mark.parametrize("protocol", ["chat_completions", "responses"])
-def test_configured_protocol_returns_tool_calls_and_accepts_tool_results(protocol) -> None:
+def test_configured_protocol_returns_tool_calls_and_accepts_tool_results(
+    protocol, session_factory
+) -> None:
+    from app.application.budget import TokenBudgetService
+
+    ledger = TokenBudgetService(session_factory)
+    ledger.initialize(1_000_000)
     requests = []
 
     def respond(request: httpx.Request) -> httpx.Response:
@@ -133,6 +139,7 @@ def test_configured_protocol_returns_tool_calls_and_accepts_tool_results(protoco
                     llm_max_output_tokens=512,
                 ),
                 http_async_client=client,
+                budget_service=ledger,
             ).bind_tools(create_default_registry().model_schemas(), tool_choice="auto")
             messages = [("human", "Inspect the inputs directory.")]
             first = await model.ainvoke(messages)

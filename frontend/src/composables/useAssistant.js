@@ -9,6 +9,7 @@ export function useAssistant() {
   const mailStatus = ref('unconfigured')
   const mailBusy = ref(false)
   const currentBrief = ref(null)
+  const budget = ref(null)
   const status = ref({ latest_run: null, active_run: null, scheduler_running: false, smtp_configured: false, next_run_at: null })
   const now = ref(Date.now())
   const loading = ref(true)
@@ -43,10 +44,11 @@ export function useAssistant() {
   }
   async function refresh() {
     const version = ++refreshVersion
-    const [workspace, brief] = await Promise.all([api('/status'), api('/briefs/latest')])
+    const [workspace, brief, allowance] = await Promise.all([api('/status'), api('/briefs/latest'), api('/budget')])
     if (disposed || version !== refreshVersion) return
     status.value = workspace
     currentBrief.value = brief
+    budget.value = allowance
     now.value = Date.now()
   }
   async function initialize() {
@@ -138,5 +140,5 @@ export function useAssistant() {
   }
   onMounted(async () => { await initialize(); if (!disposed) pollTimer = setTimeout(poll, running.value ? 2000 : 10000) })
   onScopeDispose(() => { disposed = true; clearTimeout(pollTimer) })
-  return { preferences, profileConfigured, preferencesConfigured, mailStatus, mailBusy, currentBrief, status, now, loading, ready, error, notice, actionError, running, saving, initialize, refresh, saveIdentity, savePreferences, run, testEmail, confirmEmail, retryDelivery }
+  return { preferences, profileConfigured, preferencesConfigured, mailStatus, mailBusy, currentBrief, budget, status, now, loading, ready, error, notice, actionError, running, saving, initialize, refresh, saveIdentity, savePreferences, run, testEmail, confirmEmail, retryDelivery }
 }

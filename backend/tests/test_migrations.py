@@ -28,6 +28,8 @@ def test_initial_migration_creates_profile_tables(tmp_path: Path) -> None:
         "brief",
         "tool_call",
         "mail_delivery",
+        "token_budget",
+        "token_usage",
         "alembic_version",
     } <= tables
     assert "recipient_email" in {

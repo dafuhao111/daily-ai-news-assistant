@@ -136,3 +136,11 @@ it('后端复用当天任务时不伪装为新任务或再次投递', async () =
   expect(wrapper.text()).toContain('未重复生成或发送')
   expect(fetcher.mock.calls.some(([url]) => url.includes('/delivery/retry'))).toBe(false)
 })
+it('预算区分确认用量与预留，并显示耗尽状态', async () => {
+  const { state } = await start()
+  expect(wrapper.get('[aria-label="项目 Token 预算"]').text()).toContain('待核对预留 200,000')
+  expect(wrapper.get('[aria-label="项目 Token 预算"]').text()).toContain('可用 681,229')
+  state.budget = { initialized: true, limit_tokens: 1000000, confirmed_tokens: 1000000, uncertain_tokens: 0, reserved_tokens: 0, available_tokens: 0, blocked: true }
+  await vi.advanceTimersByTimeAsync(10000); await flushPromises()
+  expect(wrapper.text()).toContain('模型请求将停止')
+})

@@ -7,6 +7,7 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.application.budget import BudgetError, TokenBudgetService
 from app.application.deliveries import DeliveryError
 from app.application.mail_tests import MailTestError
 from app.application.preferences import get_preferences, save_preferences
@@ -33,6 +34,14 @@ from app.schemas.tasks import RunAccepted, RunStatusRead
 logger = logging.getLogger(__name__)
 router = APIRouter()
 SessionDep = Annotated[Session, Depends(get_session)]
+
+
+@router.get("/budget")
+def read_token_budget(request: Request, _session: SessionDep):
+    try:
+        return TokenBudgetService(request.app.state.session_factory).status()
+    except BudgetError as error:
+        raise HTTPException(status_code=503, detail=error.code) from None
 
 
 @router.get("/profile", response_model=ProfileRead)
