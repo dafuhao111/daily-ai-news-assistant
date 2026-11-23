@@ -2,6 +2,22 @@
 
 本机单用户 MVP：Vue 3 + FastAPI + MySQL + LangGraph。LLM 使用注册工具自主获取 RSS 材料、按偏好生成中文简报；简报保存后通过已验证的本人邮箱投递。
 
+## 从 GitHub 下载使用
+
+每人独立安装、使用自己的数据库、模型 Key 和可选 SMTP，不连接作者服务器。首次使用请按 [GitHub 安装指南](docs/GitHub-install.md) 完成建库、环境配置和预算初始化。
+
+Windows 在仓库根目录执行（第一步只准备示例配置，编辑配置后再执行安装）：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -PrepareOnly
+# 按安装指南创建数据库并编辑 backend/.env，再继续：
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1
+# 全新数据库还需按指南一次性初始化自己的预算，然后启动：
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
+```
+
+脚本不覆盖已有配置，不自动初始化/重置预算。首次示例默认关闭调度；每日邮件需要另行验证邮箱、启用订阅并开启后端调度。当前没有公网鉴权，不用于多人共享网站。
+
 ## 本地运行
 
 需要 Node.js 22.12/24、Python 3.12（项目最低 3.11）、uv 和 MySQL。已配置的本机环境可以直接使用现有 `backend/.env`，不要覆盖它。

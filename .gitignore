@@ -79,3 +79,7 @@ out/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# 本地 IDEA 项目配置
+.idea/
+*.iml
