@@ -68,7 +68,7 @@ Read user-owned saved briefs and paginated task history through the new read API
 uv run --locked python -m app.diagnostics RUN_ID
 ```
 
-This prints paired model tool requests and execution results, final status, brief ID, and numeric token usage from persisted records. It omits arguments, prompts, recipients and tool payloads. See `docs/阶段G联调验收.md` for the real-model/browser validation and remaining limitations.
+This prints paired model tool requests and execution results, final status, brief ID, and numeric token usage from persisted records. It omits arguments, prompts, recipients and tool payloads.
 
 ## Task tools
 
@@ -138,8 +138,8 @@ Tests use an isolated SQLite database for repeatable API and migration coverage.
 
 ## Final acceptance
 
-Project-wide budget control is now required at every real model HTTP request. Apply Alembic head (`0005_token_budget`) and initialize once using `python -m app.budget initialize`; this installation is already initialized. A missing ledger or unavailable database blocks model requests. Use `uv run --locked python -m app.budget status` / `pending`; see [budget operations](../docs/累计预算控制.md). The durable limit defaults to one million only on explicit initialization, never resets on restart, and is not changed by `.env`. `LLM_BUDGET_REQUEST_ALLOWANCE_TOKENS=8192` adds conservative per-request framing reserve. Unknown requests retain their reservations until explicit billing reconciliation. The budget is an application guard, not a guarantee about an external provider's hidden charges.
+Project-wide budget control is now required at every real model HTTP request. Apply Alembic head (`0005_token_budget`) and initialize once using `python -m app.budget initialize`; this installation is already initialized. A missing ledger or unavailable database blocks model requests. Use `uv run --locked python -m app.budget status` / `pending`. The durable limit defaults to one million only on explicit initialization, never resets on restart, and is not changed by `.env`. `LLM_BUDGET_REQUEST_ALLOWANCE_TOKENS=8192` adds conservative per-request framing reserve. Unknown requests retain their reservations until explicit billing reconciliation. The budget is an application guard, not a guarantee about an external provider's hidden charges.
 
-See [acceptance report](../docs/完整验收报告.md) and [deployment/demo](../docs/部署与演示.md). Manual work recovers after restart even with daily scheduling disabled; interrupted scheduled work is marked scheduler_disabled in that mode. Completed/empty daily slots are reused. Explicit one-shot live validation is available through `uv run --locked python -m app.acceptance --live`; add `--send-verified-email` only for an authorized single send. This is a developer acceptance command, not an automatic daily job.
+See [technical plan](../docs/技术方案.md) and [product design](../docs/产品设计文档.md). Manual work recovers after restart even with daily scheduling disabled; interrupted scheduled work is marked scheduler_disabled in that mode. Completed/empty daily slots are reused. Explicit one-shot live validation is available through `uv run --locked python -m app.acceptance --live`; add `--send-verified-email` only for an authorized single send. This is a developer acceptance command, not an automatic daily job.
 
 Each model task owns and closes its async HTTP client. Model input bytes are bounded per request and cumulatively (128,000 / 512,000 by default). These limits do not implement a cumulative project token invoice cap. RSS failures are saved as a coverage warning. Ambiguous publication dates retain their original value without inventing UTC.
