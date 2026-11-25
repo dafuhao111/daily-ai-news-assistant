@@ -30,7 +30,7 @@ def checkout(tmp_path):
     (root / "scripts").mkdir(parents=True)
     (root / "backend/config").mkdir(parents=True)
     (root / "frontend/dist").mkdir(parents=True)
-    for name in ("setup.ps1", "start.ps1"):
+    for name in ("setup.ps1", "start.ps1", "quickstart.ps1"):
         shutil.copy2(ROOT / "scripts" / name, root / "scripts" / name)
     shutil.copy2(ROOT / "backend/.env.example", root / "backend/.env.example")
     shutil.copy2(
@@ -41,7 +41,17 @@ def checkout(tmp_path):
     return root
 
 
-def invoke(shell, checkout, tmp_path, script, *, prepare=False, fail_command="", node="v24.18.0"):
+def invoke(
+    shell,
+    checkout,
+    tmp_path,
+    script,
+    *,
+    prepare=False,
+    fail_command="",
+    node="v24.18.0",
+    budget_status_json='{"initialized":false}',
+):
     log = tmp_path / "calls.jsonl"
     harness = tmp_path / "harness.ps1"
     harness.write_text(
@@ -57,7 +67,12 @@ function Record-Call {
         $global:LASTEXITCODE = 7
     }
 }
-function uv { Record-Call -Name 'uv' -Values $args }
+function uv {
+    Record-Call -Name 'uv' -Values $args
+    if (($args -join ' ') -eq 'run --locked python -m app.budget status') {
+        Write-Output $env:INSTALL_TEST_BUDGET_STATUS_JSON
+    }
+}
 function npm.cmd { Record-Call -Name 'npm' -Values $args }
 function node { Record-Call -Name 'node' -Values $args; $env:INSTALL_TEST_NODE }
 try {
@@ -74,6 +89,7 @@ try {
         "INSTALL_TEST_LOG": str(log),
         "INSTALL_TEST_FAIL": fail_command,
         "INSTALL_TEST_NODE": node,
+        "INSTALL_TEST_BUDGET_STATUS_JSON": budget_status_json,
     }
     args = [
         shell,
@@ -206,3 +222,68 @@ def test_start_reports_server_failure(shell, checkout, tmp_path):
     result, calls = invoke(shell, checkout, tmp_path, "start.ps1", fail_command=command)
     assert result.returncode != 0
     assert len(calls) == 1
+
+
+def test_quickstart_builds_migrates_initializes_once_and_starts_sqlite_preview(
+    shell, checkout, tmp_path
+):
+    result, calls = invoke(shell, checkout, tmp_path, "quickstart.ps1")
+    assert result.returncode == 0, result.stdout
+    assert [(call["command"], call["arguments"]) for call in calls] == [
+        ("node", ["--version"]),
+        ("npm", ["ci"]),
+        ("npm", ["run", "build"]),
+        ("uv", ["sync", "--locked", "--no-dev"]),
+        ("uv", ["run", "--locked", "python", "-m", "alembic", "upgrade", "head"]),
+        ("uv", ["run", "--locked", "python", "-m", "app.budget", "status"]),
+        (
+            "uv",
+            ["run", "--locked", "python", "-m", "app.budget", "initialize", "--limit", "1000000"],
+        ),
+        (
+            "uv",
+            [
+                "run",
+                "--locked",
+                "python",
+                "-m",
+                "uvicorn",
+                "app.main:app",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                "8000",
+                "--workers",
+                "1",
+            ],
+        ),
+    ]
+    assert all(Path(call["cwd"]) == checkout / "frontend" for call in calls[1:3])
+    assert all(Path(call["cwd"]) == checkout / "backend" for call in calls[3:])
+    assert (checkout / "backend/config/rss_sources.json").is_file()
+    assert (checkout / "backend/data").is_dir()
+
+
+def test_quickstart_preserves_existing_budget_and_rss_config(shell, checkout, tmp_path):
+    rss = checkout / "backend/config/rss_sources.json"
+    rss.write_text('[{"source_id":"keep"}]', encoding="utf-8")
+    (checkout / "backend/.env").write_text("LOCAL_CONFIG=keep", encoding="utf-8")
+    result, calls = invoke(
+        shell,
+        checkout,
+        tmp_path,
+        "quickstart.ps1",
+        budget_status_json='{"initialized":true}',
+    )
+    assert result.returncode == 0, result.stdout
+    assert not any("initialize" in call["arguments"] for call in calls)
+    assert rss.read_text(encoding="utf-8") == '[{"source_id":"keep"}]'
+    assert (checkout / "backend/.env").read_text(encoding="utf-8") == "LOCAL_CONFIG=keep"
+
+
+def test_quickstart_stops_before_backend_on_frontend_build_failure(shell, checkout, tmp_path):
+    result, calls = invoke(
+        shell, checkout, tmp_path, "quickstart.ps1", fail_command="npm:run build"
+    )
+    assert result.returncode != 0
+    assert not any(call["command"] == "uv" for call in calls)

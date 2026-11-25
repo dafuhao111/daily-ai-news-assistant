@@ -29,7 +29,7 @@ if (-not (Test-Path -LiteralPath $rssPath -PathType Leaf)) {
 }
 if ($PrepareOnly -or $createdEnv) {
     Write-Host 'Edit backend/.env, create your MySQL database/account, then run this script again without -PrepareOnly.'
-    Write-Host 'See docs/GitHub-install.md. No dependencies, migrations, model calls or email sends were executed.'
+    Write-Host 'See backend/README.md for MySQL setup. No dependencies, migrations, model calls or email sends were executed.'
     return
 }
 
@@ -63,5 +63,5 @@ try {
     Pop-Location
 }
 Write-Host 'Dependencies, frontend build and database migrations completed.'
-Write-Host 'For a NEW database only, initialize your own Token budget as documented in docs/GitHub-install.md.'
+Write-Host 'For a NEW database only, initialize the Token budget as documented in backend/README.md.'
 Write-Host 'Then run scripts/start.ps1. Setup does not initialize/reset budgets, start scheduling or send email.'

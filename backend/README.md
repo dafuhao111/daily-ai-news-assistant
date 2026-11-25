@@ -14,14 +14,19 @@ uv sync --locked --extra dev
 
 Before starting, create the `daily_ai_news` database with `utf8mb4` and a dedicated least-privilege MySQL account. Replace the placeholder `DATABASE_URL` in the untracked `.env`; do not use MySQL root or commit credentials.
 
+For a five-minute local preview without MySQL, use `scripts/quickstart.ps1` from the repository root. It uses a separate ignored SQLite database and keeps scheduling disabled. This mode can show the app without credentials; configure `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_MODEL` in `backend/.env` before generating real briefs.
+
 The locked `pymysql[rsa]` dependency includes the cryptography support required for MySQL 8 `caching_sha2_password` authentication. Do not weaken the database account's authentication plugin to work around a missing dependency.
 
 ## Migrations and run
 
 ```powershell
 uv run --locked alembic upgrade head
+uv run --locked python -m app.budget initialize --limit 1000000
 uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
 ```
+
+Initialize the budget once for a new database only. Do not rerun the initialization command on an existing database; it refuses to reset an existing budget.
 
 The API rejects non-loopback Host headers and state-changing requests without a local Origin and JSON content type. It does not implement authentication or expose mail/model secrets.
 

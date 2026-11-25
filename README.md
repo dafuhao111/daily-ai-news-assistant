@@ -2,39 +2,32 @@
 
 本机单用户 MVP：Vue 3 + FastAPI + MySQL + LangGraph。LLM 使用注册工具自主获取 RSS 材料、按偏好生成中文简报；简报保存后通过已验证的本人邮箱投递。
 
-## 从 GitHub 下载使用
+## 5 分钟快速启动
 
-每人独立安装、使用自己的数据库、模型 Key 和可选 SMTP，不连接作者服务器。首次使用先按下面的 Windows 步骤准备配置、创建数据库并完成安装。
+适用于已安装 Git、Node.js 22.12+/24 LTS 和 uv、且网络可用的 Windows 电脑，通常可在 5 分钟内启动。首次下载依赖的耗时取决于网速；快速体验使用独立 SQLite 数据库，不需要安装 MySQL、填写模型密钥或配置 SMTP。
 
-Windows 在仓库根目录执行（第一步只准备示例配置，编辑配置后再执行安装）：
+```powershell
+git clone https://github.com/dafuhao111/daily-ai-news-assistant.git
+cd daily-ai-news-assistant
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\quickstart.ps1
+```
+
+看到 `http://127.0.0.1:8000/` 后打开浏览器即可。脚本自动安装锁定依赖、构建前端、执行 SQLite migration、仅在新数据库初始化预算并启动服务；它使用 `backend/data/quickstart.db`，保留已有 `.env` 和数据库。快速模式关闭定时任务，不发送邮件。若要生成真实 AI 简报，在 `backend/.env` 配置自己的 `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL`。完整 MySQL 安装见 [backend/README.md](backend/README.md)。
+
+## MySQL 本地运行
+
+需要 Node.js 22.12+/24 LTS、uv 和 MySQL。先在 `backend/.env` 配置数据库连接，再运行安装脚本；脚本不会覆盖已有配置。
+
+在项目根目录运行：
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1 -PrepareOnly
-# 创建数据库并编辑 backend/.env，再继续：
+# 首次准备后，编辑 backend/.env 并创建 MySQL 数据库和低权限账号，再继续：
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup.ps1
-# 全新数据库请按 backend/README.md 一次性初始化预算，然后启动：
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start.ps1
 ```
 
-脚本不覆盖已有配置，不自动初始化/重置预算。首次示例默认关闭调度；每日邮件需要另行验证邮箱、启用订阅并开启后端调度。当前没有公网鉴权，不用于多人共享网站。
-
-## 本地运行
-
-需要 Node.js 22.12/24、Python 3.12（项目最低 3.11）、uv 和 MySQL。已配置的本机环境可以直接使用现有 `backend/.env`，不要覆盖它。
-
-在项目根目录构建前端：
-
-```powershell
-cd frontend
-npm ci
-npm run build
-cd ../backend
-uv sync --locked --extra dev
-uv run --locked alembic upgrade head
-uv run --locked uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1
-```
-
-打开 <http://127.0.0.1:8000/>。后端配置细节见 `backend/README.md`。
+MySQL 配置、预算初始化、邮件和调度说明见 [backend/README.md](backend/README.md)。当前应用只面向本机单用户，不开放公网访问。
 
 ## 项目文档
 

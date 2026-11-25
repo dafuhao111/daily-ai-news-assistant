@@ -46,6 +46,7 @@ coverage/
 
 # Python 虚拟环境、字节码和打包产物
 .venv/
+/backend/.venv-quickstart/
 venv/
 env/
 __pycache__/
